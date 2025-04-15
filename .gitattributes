@@ -1,0 +1,2 @@
+binaries/IncogniFi-setup-1.6.0.exe filter=lfs diff=lfs merge=lfs -text
+binaries/IncogniFi-setup-latest.exe filter=lfs diff=lfs merge=lfs -text
