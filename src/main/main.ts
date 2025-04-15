@@ -1,10 +1,15 @@
 import { app, BrowserWindow, Menu, dialog } from "electron";
 import path from "path";
 
+// Set the app name
+app.name = "IcogniFi";
+
 function createWindow() {
   const mainWindow = new BrowserWindow({
     width: 1200,
     height: 800,
+    title: "IcogniFi",
+    icon: path.join(__dirname, "../renderer/assets/icognifi-alpha.png"),
     titleBarStyle: "hiddenInset",
     trafficLightPosition: { x: 20, y: 20 },
     webPreferences: {
@@ -117,7 +122,7 @@ function createWindow() {
     mainWindow.loadURL("http://localhost:5173");
   } else {
     // In production, load the built files
-    mainWindow.loadFile(path.join(__dirname, "../renderer/index.html"));
+    mainWindow.loadFile(path.resolve(__dirname, "..", "renderer", "index.html"));
   }
 }
 

@@ -1,5 +1,5 @@
 {
-  "name": "electron-vpn-browser",
+  "name": "icognifi",
   "version": "1.0.0",
   "description": "Electron-based browser with built-in proxy support",
   "main": "dist/main/main.js",
@@ -9,6 +9,9 @@
     "dev:react": "vite",
     "start:electron": "nodemon --watch dist/main --exec electron .",
     "build": "tsc --project tsconfig.main.json && vite build",
+    "build:app": "npm run build && electron-builder",
+    "build:mac": "npm run build && electron-builder --mac",
+    "build:win": "npm run build && electron-builder --win",
     "lint": "eslint src --ext ts,tsx --report-unused-disable-directives --max-warnings 0",
     "preview": "vite preview"
   },
@@ -42,5 +45,42 @@
     "react": "^18.2.0",
     "react-dom": "^18.2.0",
     "react-icons": "^5.0.1"
+  },
+  "build": {
+    "appId": "com.icognifi.browser",
+    "productName": "IcogniFi",
+    "directories": {
+      "output": "release"
+    },
+    "files": [
+      "dist/**/*",
+      "package.json"
+    ],
+    "mac": {
+      "icon": "src/renderer/assets/icognifi-alpha.png",
+      "category": "public.app-category.productivity"
+    },
+    "win": {
+      "icon": "src/renderer/assets/icognifi-alpha.png",
+      "target": [
+        {
+          "target": "nsis",
+          "arch": [
+            "x64",
+            "ia32"
+          ]
+        },
+        {
+          "target": "portable"
+        }
+      ]
+    },
+    "nsis": {
+      "oneClick": false,
+      "allowToChangeInstallationDirectory": true,
+      "createDesktopShortcut": true,
+      "createStartMenuShortcut": true,
+      "shortcutName": "IcogniFi"
+    }
   }
 }
