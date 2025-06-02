@@ -267,11 +267,6 @@ export function VPNDropdown({ isOpen, onClose }: VPNDropdownProps) {
                       SOCKS Proxy Settings
                     </button>
                   </div>
-
-                  {/* Network Stats */}
-                  <div className="mt-4 pt-4 border-t border-gray-200">
-                    <NetworkStats className="text-xs" />
-                  </div>
                 </motion.div>
               )}
             </AnimatePresence>
