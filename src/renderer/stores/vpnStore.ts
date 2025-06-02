@@ -8,7 +8,6 @@ interface Server {
   ip: string;
   port: number;
   ping: number | null;
-  load: number | null;
 }
 
 interface VPNState {
@@ -32,7 +31,6 @@ const INITIAL_SERVER: Server = {
   ip: "127.0.0.1",
   port: 8080,
   ping: null,
-  load: null,
 };
 
 const INITIAL_VPN_STATE: VPNState = {

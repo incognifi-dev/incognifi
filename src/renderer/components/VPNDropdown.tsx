@@ -1,6 +1,19 @@
 import { AnimatePresence, motion } from "framer-motion";
 import React from "react";
-import { FiActivity, FiCheck, FiEye, FiEyeOff, FiRefreshCw, FiSettings, FiWifi, FiWifiOff, FiX } from "react-icons/fi";
+import {
+  FiActivity,
+  FiCheck,
+  FiEye,
+  FiEyeOff,
+  FiRefreshCw,
+  FiSettings,
+  FiWifi,
+  FiWifiOff,
+  FiX,
+  FiInfo,
+  FiClock,
+  FiShield,
+} from "react-icons/fi";
 import { useServerStore } from "../stores/serverStore";
 import { useVPNStore } from "../stores/vpnStore";
 import { ServerList } from "./ServerList";
@@ -20,7 +33,6 @@ interface Server {
   ip: string;
   port: number;
   ping: number | null;
-  load: number | null;
 }
 
 interface ProxyConfigType {
@@ -574,6 +586,40 @@ export function VPNDropdown({ isOpen, onClose }: VPNDropdownProps) {
                       </div>
                     </div>
                   )}
+
+                  {/* Information Section */}
+                  <motion.div
+                    initial={{ opacity: 0, y: 10 }}
+                    animate={{ opacity: 1, y: 0 }}
+                    className="bg-gradient-to-r from-blue-50 to-indigo-50 rounded-lg p-4 mb-4 border border-blue-200"
+                  >
+                    <div className="flex items-start space-x-3">
+                      <FiInfo className="w-5 h-5 text-blue-600 mt-0.5 flex-shrink-0" />
+                      <div className="space-y-3">
+                        <div>
+                          <h4 className="text-sm font-semibold text-blue-800 mb-1 flex items-center">
+                            <FiClock className="w-4 h-4 mr-1" />
+                            Automated Server Discovery
+                          </h4>
+                          <p className="text-xs text-blue-700 leading-relaxed">
+                            Our service automatically discovers and tests new proxy servers every 10 minutes, ensuring
+                            you always have access to the fastest and most reliable connections.
+                          </p>
+                        </div>
+
+                        <div className="border-t border-blue-200 pt-3">
+                          <h4 className="text-sm font-semibold text-blue-800 mb-1 flex items-center">
+                            <FiShield className="w-4 h-4 mr-1" />
+                            Privacy Recommendation
+                          </h4>
+                          <p className="text-xs text-blue-700 leading-relaxed">
+                            For maximum anonymity, we recommend switching servers periodically. This prevents tracking
+                            and maintains your privacy across different sessions.
+                          </p>
+                        </div>
+                      </div>
+                    </div>
+                  </motion.div>
 
                   {/* Actions */}
                   <div className="space-y-2">

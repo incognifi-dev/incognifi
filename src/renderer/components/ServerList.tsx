@@ -1,6 +1,6 @@
 import { AnimatePresence, motion } from "framer-motion";
 import { useEffect, useMemo, useState } from "react";
-import { FiChevronDown, FiChevronUp, FiRefreshCw, FiSearch } from "react-icons/fi";
+import { FiChevronDown, FiChevronUp, FiRefreshCw, FiSearch, FiCheck, FiX, FiMapPin, FiActivity } from "react-icons/fi";
 import { useServerStore } from "../stores/serverStore";
 
 interface Server {
@@ -11,7 +11,6 @@ interface Server {
   ip: string;
   port: number;
   ping: number | null;
-  load: number | null;
 }
 
 interface ServerListProps {
@@ -56,7 +55,6 @@ const fetchProxyList = async (): Promise<Server[]> => {
           ip,
           port,
           ping: null,
-          load: null,
         };
       });
 
@@ -72,7 +70,7 @@ const fetchProxyList = async (): Promise<Server[]> => {
   }
 };
 
-type SortField = "ping" | "load" | "country" | "ip";
+type SortField = "ping" | "country" | "ip";
 
 export function ServerList({ onSelect, currentServer }: ServerListProps) {
   const [searchQuery, setSearchQuery] = useState("");
@@ -428,27 +426,36 @@ export function ServerList({ onSelect, currentServer }: ServerListProps) {
           // If both are null, maintain original order (or sort by IP as fallback)
           return a.ip.localeCompare(b.ip);
         }
-        if (sortField === "load") {
-          // Handle null values for load
-          const aVal = a[sortField] ?? Number.MAX_VALUE;
-          const bVal = b[sortField] ?? Number.MAX_VALUE;
-          return multiplier * (aVal - bVal);
-        }
         return 0;
       });
   }, [servers, searchQuery, sortField, sortDirection]);
+
+  // Calculate detailed statistics
+  const statistics = useMemo(() => {
+    const totalServers = servers.length;
+    const healthyServers = servers.filter((server) => server.ping !== null);
+    const discardedServers = servers.filter((server) => server.ping === null);
+    const serversWithLocation = servers.filter((server) => server.country !== "N/A" && server.country !== "Unknown");
+    const averagePing =
+      healthyServers.length > 0
+        ? Math.round(healthyServers.reduce((sum, server) => sum + (server.ping || 0), 0) / healthyServers.length)
+        : 0;
+
+    return {
+      total: totalServers,
+      healthy: healthyServers.length,
+      discarded: discardedServers.length,
+      withLocation: serversWithLocation.length,
+      locationSuccessRate: totalServers > 0 ? Math.round((serversWithLocation.length / totalServers) * 100) : 0,
+      healthyRate: totalServers > 0 ? Math.round((healthyServers.length / totalServers) * 100) : 0,
+      averagePing,
+    };
+  }, [servers]);
 
   const getPingColor = (ping: number | null) => {
     if (ping === null) return "text-gray-400";
     if (ping < 50) return "text-green-500";
     if (ping < 100) return "text-yellow-500";
-    return "text-red-500";
-  };
-
-  const getLoadColor = (load: number | null) => {
-    if (load === null) return "text-gray-400";
-    if (load < 50) return "text-green-500";
-    if (load < 80) return "text-yellow-500";
     return "text-red-500";
   };
 
@@ -459,6 +466,73 @@ export function ServerList({ onSelect, currentServer }: ServerListProps) {
 
   return (
     <div className="p-4 space-y-4">
+      {/* Statistics Cards */}
+      {!isLoading && servers.length > 0 && (
+        <div className="grid grid-cols-2 md:grid-cols-4 gap-3 mb-4">
+          <motion.div
+            initial={{ opacity: 0, y: 20 }}
+            animate={{ opacity: 1, y: 0 }}
+            className="bg-gradient-to-r from-blue-50 to-blue-100 p-3 rounded-lg border border-blue-200"
+          >
+            <div className="flex items-center justify-between">
+              <div>
+                <p className="text-blue-600 text-xs font-medium uppercase tracking-wide">Total Servers</p>
+                <p className="text-2xl font-bold text-blue-800">{statistics.total}</p>
+              </div>
+              <FiActivity className="w-6 h-6 text-blue-500" />
+            </div>
+          </motion.div>
+
+          <motion.div
+            initial={{ opacity: 0, y: 20 }}
+            animate={{ opacity: 1, y: 0 }}
+            transition={{ delay: 0.1 }}
+            className="bg-gradient-to-r from-green-50 to-green-100 p-3 rounded-lg border border-green-200"
+          >
+            <div className="flex items-center justify-between">
+              <div>
+                <p className="text-green-600 text-xs font-medium uppercase tracking-wide">Healthy</p>
+                <p className="text-2xl font-bold text-green-800">{statistics.healthy}</p>
+                <p className="text-xs text-green-600">{statistics.healthyRate}% success</p>
+              </div>
+              <FiCheck className="w-6 h-6 text-green-500" />
+            </div>
+          </motion.div>
+
+          <motion.div
+            initial={{ opacity: 0, y: 20 }}
+            animate={{ opacity: 1, y: 0 }}
+            transition={{ delay: 0.2 }}
+            className="bg-gradient-to-r from-red-50 to-red-100 p-3 rounded-lg border border-red-200"
+          >
+            <div className="flex items-center justify-between">
+              <div>
+                <p className="text-red-600 text-xs font-medium uppercase tracking-wide">Discarded</p>
+                <p className="text-2xl font-bold text-red-800">{statistics.discarded}</p>
+                <p className="text-xs text-red-600">Unhealthy/Failed</p>
+              </div>
+              <FiX className="w-6 h-6 text-red-500" />
+            </div>
+          </motion.div>
+
+          <motion.div
+            initial={{ opacity: 0, y: 20 }}
+            animate={{ opacity: 1, y: 0 }}
+            transition={{ delay: 0.3 }}
+            className="bg-gradient-to-r from-purple-50 to-purple-100 p-3 rounded-lg border border-purple-200"
+          >
+            <div className="flex items-center justify-between">
+              <div>
+                <p className="text-purple-600 text-xs font-medium uppercase tracking-wide">Avg Ping</p>
+                <p className="text-2xl font-bold text-purple-800">{statistics.averagePing}ms</p>
+                <p className="text-xs text-purple-600">{statistics.withLocation} with location</p>
+              </div>
+              <FiMapPin className="w-6 h-6 text-purple-500" />
+            </div>
+          </motion.div>
+        </div>
+      )}
+
       {/* Search bar and refresh button */}
       <div className="flex gap-2">
         <div className="relative flex-1">
@@ -534,8 +608,8 @@ export function ServerList({ onSelect, currentServer }: ServerListProps) {
       {/* Server list */}
       {!isLoading && !error && (
         <div className="overflow-hidden rounded-lg border border-gray-200">
-          {/* Header */}
-          <div className="grid grid-cols-12 gap-4 px-4 py-2 bg-gray-50 border-b border-gray-200 text-sm font-medium text-gray-600">
+          {/* Header - Updated to remove Load column and adjust grid */}
+          <div className="grid grid-cols-10 gap-4 px-4 py-2 bg-gray-50 border-b border-gray-200 text-sm font-medium text-gray-600">
             <div
               className="col-span-3 flex items-center cursor-pointer"
               onClick={() => handleSort("country")}
@@ -566,18 +640,9 @@ export function ServerList({ onSelect, currentServer }: ServerListProps) {
                 {sortField === "ping" && (sortDirection === "asc" ? <FiChevronUp /> : <FiChevronDown />)}
               </span>
             </div>
-            <div
-              className="col-span-2 flex items-center cursor-pointer"
-              onClick={() => handleSort("load")}
-            >
-              Load
-              <span className="ml-1">
-                {sortField === "load" && (sortDirection === "asc" ? <FiChevronUp /> : <FiChevronDown />)}
-              </span>
-            </div>
           </div>
 
-          {/* Server rows */}
+          {/* Server rows - Updated to remove Load column and adjust grid */}
           <div className="max-h-96 overflow-y-auto">
             <AnimatePresence>
               {filteredAndSortedServers.length === 0 ? (
@@ -591,7 +656,7 @@ export function ServerList({ onSelect, currentServer }: ServerListProps) {
                     initial={{ opacity: 0 }}
                     animate={{ opacity: 1 }}
                     exit={{ opacity: 0 }}
-                    className={`grid grid-cols-12 gap-4 px-4 py-3 border-b border-gray-100 hover:bg-violet-50 cursor-pointer transition-colors ${
+                    className={`grid grid-cols-10 gap-4 px-4 py-3 border-b border-gray-100 hover:bg-violet-50 cursor-pointer transition-colors ${
                       currentServer?.id === server.id ? "bg-violet-50" : ""
                     }`}
                     onClick={() => onSelect(server)}
@@ -617,9 +682,6 @@ export function ServerList({ onSelect, currentServer }: ServerListProps) {
                       ) : (
                         "N/A"
                       )}
-                    </div>
-                    <div className={`col-span-2 flex items-center font-medium ${getLoadColor(server.load)}`}>
-                      {server.load !== null ? `${server.load}%` : "N/A"}
                     </div>
                   </motion.div>
                 ))

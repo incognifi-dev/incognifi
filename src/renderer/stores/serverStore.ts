@@ -9,7 +9,6 @@ interface Server {
   ip: string;
   port: number;
   ping: number | null;
-  load: number | null;
 }
 
 interface ServerStore {
