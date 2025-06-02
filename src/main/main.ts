@@ -1,8 +1,124 @@
 import { app, BrowserWindow, Menu, dialog, ipcMain } from "electron";
 import path from "path";
+import si from "systeminformation";
 
 // Set the app name
 app.name = "IcogniFi";
+
+// Network monitoring state
+let networkBaseline: any = null;
+let lastNetworkStats: any = null;
+let sessionStartTime: number = 0;
+
+// Initialize network monitoring baseline
+async function initializeNetworkMonitoring() {
+  try {
+    const networkStats = await si.networkStats();
+    const networkInterfaces = await si.networkInterfaces();
+
+    // Get the primary network interface
+    const primaryInterface =
+      networkInterfaces.find((iface) => iface.default || iface.ip4) ||
+      networkInterfaces.find((iface) => !iface.internal && iface.ip4) ||
+      networkInterfaces[0];
+
+    // Find matching network stats for the primary interface
+    const primaryStats = networkStats.find((stat) => stat.iface === primaryInterface?.iface) || networkStats[0];
+
+    if (primaryStats) {
+      networkBaseline = {
+        rx_bytes: primaryStats.rx_bytes,
+        tx_bytes: primaryStats.tx_bytes,
+        interfaceName: primaryStats.iface,
+      };
+
+      lastNetworkStats = {
+        rx_bytes: primaryStats.rx_bytes,
+        tx_bytes: primaryStats.tx_bytes,
+        timestamp: Date.now(),
+      };
+
+      sessionStartTime = Date.now();
+      console.log(`Network monitoring initialized for interface: ${primaryStats.iface}`);
+    }
+  } catch (error) {
+    console.error("Failed to initialize network monitoring:", error);
+  }
+}
+
+// Function to get network statistics
+async function getNetworkStats() {
+  try {
+    const networkStats = await si.networkStats();
+    const networkInterfaces = await si.networkInterfaces();
+
+    // Get the primary network interface (usually the one with a default route or IP)
+    const primaryInterface =
+      networkInterfaces.find((iface) => iface.default || iface.ip4) ||
+      networkInterfaces.find((iface) => !iface.internal && iface.ip4) ||
+      networkInterfaces[0];
+
+    // Find matching network stats for the primary interface
+    const primaryStats = networkStats.find((stat) => stat.iface === primaryInterface?.iface) || networkStats[0];
+
+    if (!primaryStats || !networkBaseline) {
+      return {
+        downloadSpeed: 0,
+        uploadSpeed: 0,
+        totalDownload: 0,
+        totalUpload: 0,
+        sessionDuration: 0,
+        isConnected: false,
+      };
+    }
+
+    // Calculate session totals (relative to baseline)
+    const sessionDownload = Math.max(0, primaryStats.rx_bytes - networkBaseline.rx_bytes);
+    const sessionUpload = Math.max(0, primaryStats.tx_bytes - networkBaseline.tx_bytes);
+
+    // Calculate speeds if we have previous data
+    let downloadSpeed = 0;
+    let uploadSpeed = 0;
+
+    if (lastNetworkStats && primaryStats.ms > 0) {
+      const timeDiff = primaryStats.ms / 1000; // Convert to seconds
+      const downloadDiff = primaryStats.rx_bytes - lastNetworkStats.rx_bytes;
+      const uploadDiff = primaryStats.tx_bytes - lastNetworkStats.tx_bytes;
+
+      downloadSpeed = Math.max(0, downloadDiff / timeDiff);
+      uploadSpeed = Math.max(0, uploadDiff / timeDiff);
+    }
+
+    // Store current stats for next calculation
+    lastNetworkStats = {
+      rx_bytes: primaryStats.rx_bytes,
+      tx_bytes: primaryStats.tx_bytes,
+      timestamp: Date.now(),
+    };
+
+    // Calculate session duration
+    const sessionDuration = Math.floor((Date.now() - sessionStartTime) / 1000);
+
+    return {
+      downloadSpeed,
+      uploadSpeed,
+      totalDownload: sessionDownload,
+      totalUpload: sessionUpload,
+      sessionDuration,
+      isConnected: !!primaryInterface?.ip4,
+    };
+  } catch (error) {
+    console.error("Error getting network stats:", error);
+    return {
+      downloadSpeed: 0,
+      uploadSpeed: 0,
+      totalDownload: 0,
+      totalUpload: 0,
+      sessionDuration: 0,
+      isConnected: false,
+    };
+  }
+}
 
 function createWindow() {
   const mainWindow = new BrowserWindow({
@@ -39,6 +155,11 @@ function createWindow() {
       return { success: true };
     }
     return { success: false };
+  });
+
+  // Set up IPC handler for network stats
+  ipcMain.handle("get-network-stats", async () => {
+    return await getNetworkStats();
   });
 
   // Create the application menu
@@ -108,6 +229,9 @@ function createWindow() {
 app.whenReady().then(() => {
   createWindow();
 
+  // Initialize network monitoring baseline
+  initializeNetworkMonitoring();
+
   app.on("activate", () => {
     if (BrowserWindow.getAllWindows().length === 0) {
       createWindow();
@@ -124,4 +248,5 @@ app.on("window-all-closed", () => {
 // Clean up IPC handlers when app is quitting
 app.on("before-quit", () => {
   ipcMain.removeAllListeners("clear-storage");
+  ipcMain.removeAllListeners("get-network-stats");
 });

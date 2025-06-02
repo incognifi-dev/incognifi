@@ -5,6 +5,7 @@ import { UsernameSetupModal } from "./UsernameSetupModal";
 import { FriendsList } from "./FriendsList";
 import { ChatWindow } from "./ChatWindow";
 import { StatusSelector } from "./StatusSelector";
+import { NetworkStats } from "./NetworkStats";
 import { dummyFriends } from "../data/dummyFriends";
 import type { UserData, Chat, UserStatus } from "../types/social";
 
@@ -111,22 +112,14 @@ export function SocialBar() {
     <>
       {/* Bottom Bar */}
       <div className="fixed bottom-0 left-0 right-0 h-12 bg-gray-900 border-t border-gray-800 flex items-center px-4 z-50">
-        {/* Chat Button */}
-        <button
-          onClick={handleChatClick}
-          className="flex items-center space-x-2 text-gray-300 hover:text-white transition-colors"
-        >
-          <div className="relative">
-            <FiMessageSquare className="w-5 h-5" />
-            {userData && (
-              <div className={`absolute -top-1 -right-1 w-2 h-2 rounded-full ${getStatusColor(userData.status)}`} />
-            )}
-          </div>
-          <span className="text-sm font-medium">Chat Demo</span>
-        </button>
+        {/* Network Stats - Left Side */}
+        <NetworkStats className="mr-4" />
 
-        {/* Active Chats */}
-        <div className="flex-1 flex items-center space-x-2 px-4">
+        {/* Spacer to push chat to the right */}
+        <div className="flex-1" />
+
+        {/* Active Minimized Chats - Center Right */}
+        <div className="flex items-center space-x-2 mr-4">
           {activeChats
             .filter((chat) => chat.isMinimized)
             .map((chat) => {
@@ -146,21 +139,38 @@ export function SocialBar() {
             })}
         </div>
 
-        {/* User Info (if set up) */}
-        {userData && (
-          <div className="flex items-center space-x-3">
-            <div className="flex items-center space-x-2">
-              <div className="w-6 h-6 rounded-full bg-violet-600 flex items-center justify-center">
-                <span className="text-xs text-white font-medium">{userData.username.charAt(0).toUpperCase()}</span>
+        {/* User Info and Chat Demo - Right Side */}
+        <div className="flex items-center space-x-4">
+          {/* User Info (if set up) */}
+          {userData && (
+            <div className="flex items-center space-x-3">
+              <div className="flex items-center space-x-2">
+                <div className="w-6 h-6 rounded-full bg-violet-600 flex items-center justify-center">
+                  <span className="text-xs text-white font-medium">{userData.username.charAt(0).toUpperCase()}</span>
+                </div>
+                <span className="text-sm text-gray-300">{userData.username}</span>
               </div>
-              <span className="text-sm text-gray-300">{userData.username}</span>
+              <StatusSelector
+                currentStatus={userData.status}
+                onStatusChange={handleStatusChange}
+              />
             </div>
-            <StatusSelector
-              currentStatus={userData.status}
-              onStatusChange={handleStatusChange}
-            />
-          </div>
-        )}
+          )}
+
+          {/* Chat Demo Button */}
+          <button
+            onClick={handleChatClick}
+            className="flex items-center space-x-2 text-gray-300 hover:text-white transition-colors px-3 py-1 rounded-lg hover:bg-gray-800"
+          >
+            <div className="relative">
+              <FiMessageSquare className="w-5 h-5" />
+              {userData && (
+                <div className={`absolute -top-1 -right-1 w-2 h-2 rounded-full ${getStatusColor(userData.status)}`} />
+              )}
+            </div>
+            <span className="text-sm font-medium">Chat Demo</span>
+          </button>
+        </div>
       </div>
 
       {/* Username Setup Modal */}
