@@ -2,7 +2,6 @@ import { useState, useRef, useEffect, createRef } from "react";
 import type { WebviewTag } from "electron";
 import { NavigationBar } from "./components/NavigationBar";
 import { BookmarksBar } from "./components/BookmarksBar";
-import { TabsBar } from "./components/TabsBar";
 import { TitleBar } from "./components/TitleBar";
 import { SocialBar } from "./components/SocialBar";
 import { Bookmark, Tab } from "./types";
@@ -206,9 +205,7 @@ export default function App() {
 
   return (
     <div className="flex flex-col h-screen bg-white">
-      <TitleBar />
-
-      <TabsBar
+      <TitleBar
         tabs={tabs}
         activeTabId={activeTabId}
         onTabClick={setActiveTabId}
