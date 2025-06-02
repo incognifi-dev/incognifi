@@ -1,6 +1,6 @@
-import React, { useState, useMemo } from "react";
 import { motion } from "framer-motion";
-import { FiSearch, FiPlus, FiMoreVertical } from "react-icons/fi";
+import { useMemo, useState } from "react";
+import { FiMoreVertical, FiPlus, FiSearch } from "react-icons/fi";
 import { Friend } from "../types/social";
 
 interface FriendsListProps {

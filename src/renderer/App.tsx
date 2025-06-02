@@ -4,7 +4,8 @@ import { NavigationBar } from "./components/NavigationBar";
 import { BookmarksBar } from "./components/BookmarksBar";
 import { TitleBar } from "./components/TitleBar";
 import { SocialBar } from "./components/SocialBar";
-import { Bookmark, Tab } from "./types";
+import { HistoryPage } from "./components/HistoryPage";
+import { Bookmark, Tab, HistoryEntry } from "./types";
 import { defaultBookmarks } from "./data/defaultBookmarks";
 import icognifiLogo from "./assets/icognifi-alpha.png";
 import { motion } from "framer-motion";
@@ -34,6 +35,18 @@ export default function App() {
     const saved = localStorage.getItem("bookmarks");
     return saved ? JSON.parse(saved) : defaultBookmarks;
   });
+  const [history, setHistory] = useState<HistoryEntry[]>(() => {
+    const saved = localStorage.getItem("browsing-history");
+    if (saved) {
+      const parsed = JSON.parse(saved);
+      // Convert date strings back to Date objects
+      return parsed.map((entry: any) => ({
+        ...entry,
+        visitedAt: new Date(entry.visitedAt),
+      }));
+    }
+    return [];
+  });
 
   const webviewRefs = useRef<{ [key: string]: React.RefObject<WebviewTag> }>({});
   const inputRef = useRef<HTMLInputElement>(null);
@@ -49,6 +62,70 @@ export default function App() {
   useEffect(() => {
     localStorage.setItem("bookmarks", JSON.stringify(bookmarks));
   }, [bookmarks]);
+
+  // Save history to localStorage whenever it changes
+  useEffect(() => {
+    localStorage.setItem("browsing-history", JSON.stringify(history));
+  }, [history]);
+
+  const addToHistory = (url: string, title: string, favicon?: string) => {
+    // Don't add certain URLs to history
+    if (url === "https://www.google.com" || url.startsWith("icognifi://") || url === "about:blank") {
+      return;
+    }
+
+    setHistory((prev) => {
+      const existing = prev.find((entry) => entry.url === url);
+      if (existing) {
+        // Update existing entry
+        return prev.map((entry) =>
+          entry.url === url
+            ? {
+                ...entry,
+                title: title || entry.title,
+                favicon: favicon || entry.favicon,
+                visitedAt: new Date(),
+                visitCount: entry.visitCount + 1,
+              }
+            : entry
+        );
+      } else {
+        // Add new entry
+        const newEntry: HistoryEntry = {
+          id: Date.now().toString(),
+          title: title || url,
+          url,
+          favicon,
+          visitedAt: new Date(),
+          visitCount: 1,
+        };
+        return [newEntry, ...prev].slice(0, 1000); // Keep only last 1000 entries
+      }
+    });
+  };
+
+  const removeHistoryEntry = (id: string) => {
+    setHistory((prev) => prev.filter((entry) => entry.id !== id));
+  };
+
+  const clearHistory = () => {
+    setHistory([]);
+  };
+
+  const openHistoryTab = () => {
+    const historyTab: Tab = {
+      id: Date.now().toString(),
+      title: "History",
+      url: "icognifi://history",
+      isLoading: false,
+      canGoBack: false,
+      canGoForward: false,
+      state: "history",
+    };
+    setTabs((prev) => [...prev, historyTab]);
+    webviewRefs.current[historyTab.id] = createRef<WebviewTag>();
+    setActiveTabId(historyTab.id);
+  };
 
   const addBookmark = () => {
     const newBookmark: Bookmark = {
@@ -119,7 +196,7 @@ export default function App() {
 
   useEffect(() => {
     const webview = webviewRefs.current[activeTabId]?.current;
-    if (webview) {
+    if (webview && activeTab?.state === "normal") {
       const handleStartLoading = () => {
         updateTab(activeTabId, { isLoading: true });
       };
@@ -138,6 +215,11 @@ export default function App() {
           canGoForward: webview.canGoForward(),
           state: activeTab.state === "splash" ? "normal" : activeTab.state,
         });
+
+        // Add to history when navigation completes
+        if (currentUrl && currentTitle) {
+          addToHistory(currentUrl, currentTitle, activeTab.favicon);
+        }
       };
 
       const handlePageTitleUpdated = (e: any) => {
@@ -145,6 +227,12 @@ export default function App() {
           title: e.title || "New Tab",
           state: activeTab.state === "splash" ? "normal" : activeTab.state,
         });
+
+        // Update history with new title
+        const currentUrl = webview.getURL();
+        if (currentUrl && e.title) {
+          addToHistory(currentUrl, e.title, activeTab.favicon);
+        }
       };
 
       const handlePageFaviconUpdated = (e: any) => {
@@ -184,7 +272,7 @@ export default function App() {
         webview.removeEventListener("dom-ready", handleDomReady);
       };
     }
-  }, [activeTabId, activeTab.state]);
+  }, [activeTabId, activeTab?.state]);
 
   // Ensure webview refs are cleaned up properly when tabs change
   useEffect(() => {
@@ -203,6 +291,21 @@ export default function App() {
     });
   }, [tabs]);
 
+  const handleHistoryClick = (url: string) => {
+    const webview = webviewRefs.current[activeTabId]?.current;
+    if (activeTab.state === "history") {
+      // If we're in a history tab, navigate to a normal tab first
+      updateTab(activeTabId, {
+        state: "normal",
+        url: url,
+        title: "Loading...",
+      });
+    }
+    if (webview) {
+      webview.loadURL(url);
+    }
+  };
+
   return (
     <div className="flex flex-col h-screen bg-white">
       <TitleBar
@@ -211,43 +314,64 @@ export default function App() {
         onTabClick={setActiveTabId}
         onTabClose={closeTab}
         onNewTab={createTab}
+        onOpenHistory={openHistoryTab}
       />
 
-      <NavigationBar
-        inputUrl={activeTab.state === "splash" ? "icognifi://home" : activeTab.url}
-        displayUrl={activeTab.state === "splash" ? "icognifi://home" : activeTab.url}
-        isLoading={activeTab.isLoading}
-        canGoBack={activeTab.canGoBack}
-        canGoForward={activeTab.canGoForward}
-        bookmarks={bookmarks}
-        inputRef={inputRef}
-        webviewRef={webviewRefs.current[activeTabId]!}
-        onUrlChange={(url) => updateTab(activeTabId, { url })}
-        onAddBookmark={addBookmark}
-        onInputFocus={() => {}}
-        onInputBlur={() => {}}
-      />
+      {activeTab?.state !== "history" && (
+        <>
+          <NavigationBar
+            inputUrl={activeTab.state === "splash" ? "icognifi://home" : activeTab.url}
+            displayUrl={activeTab.state === "splash" ? "icognifi://home" : activeTab.url}
+            isLoading={activeTab.isLoading}
+            canGoBack={activeTab.canGoBack}
+            canGoForward={activeTab.canGoForward}
+            bookmarks={bookmarks}
+            inputRef={inputRef}
+            webviewRef={webviewRefs.current[activeTabId]!}
+            onUrlChange={(url) => updateTab(activeTabId, { url })}
+            onAddBookmark={addBookmark}
+            onInputFocus={() => {}}
+            onInputBlur={() => {}}
+          />
 
-      <BookmarksBar
-        bookmarks={bookmarks}
-        webviewRef={webviewRefs.current[activeTabId]!}
-        onRemoveBookmark={removeBookmark}
-        onBookmarkClick={(url) => {
-          const webview = webviewRefs.current[activeTabId]?.current;
-          if (activeTab.state === "splash") {
-            updateTab(activeTabId, {
-              state: "normal",
-            });
-          }
-          if (webview) {
-            webview.loadURL(url);
-          }
-        }}
-      />
+          <BookmarksBar
+            bookmarks={bookmarks}
+            webviewRef={webviewRefs.current[activeTabId]!}
+            onRemoveBookmark={removeBookmark}
+            onBookmarkClick={(url) => {
+              const webview = webviewRefs.current[activeTabId]?.current;
+              if (activeTab.state === "splash") {
+                updateTab(activeTabId, {
+                  state: "normal",
+                });
+              }
+              if (webview) {
+                webview.loadURL(url);
+              }
+            }}
+          />
+        </>
+      )}
 
-      {/* Webviews */}
+      {/* Webviews and History Page */}
       <div className="flex-1 bg-white relative overflow-hidden">
         {tabs.map((tab) => {
+          if (tab.state === "history") {
+            return (
+              <div
+                key={tab.id}
+                className={`h-full w-full ${tab.id === activeTabId ? "block" : "hidden"}`}
+              >
+                <HistoryPage
+                  history={history}
+                  onHistoryClick={handleHistoryClick}
+                  onRemoveHistoryEntry={removeHistoryEntry}
+                  onClearHistory={clearHistory}
+                />
+              </div>
+            );
+          }
+
           return tab.state === "splash" ? (
             <motion.div
               key={tab.id}

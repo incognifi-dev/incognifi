@@ -5,7 +5,16 @@ export interface Bookmark {
   favicon?: string;
 }
 
-export type TabState = "normal" | "splash";
+export interface HistoryEntry {
+  id: string;
+  title: string;
+  url: string;
+  favicon?: string;
+  visitedAt: Date;
+  visitCount: number;
+}
+
+export type TabState = "normal" | "splash" | "history";
 
 export interface Tab {
   id: string;

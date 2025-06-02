@@ -1,8 +1,8 @@
-import React, { useState, useRef, useEffect } from "react";
 import { motion } from "framer-motion";
-import { FiX, FiMinus, FiMaximize2, FiSend, FiMoreVertical } from "react-icons/fi";
-import type { Friend, ChatMessage } from "../types/social";
+import React, { useEffect, useRef, useState } from "react";
+import { FiMinus, FiSend, FiX } from "react-icons/fi";
 import { dummyMessages } from "../data/dummyFriends";
+import type { ChatMessage, Friend } from "../types/social";
 
 interface ChatWindowProps {
   friend: Friend;
@@ -12,7 +12,7 @@ interface ChatWindowProps {
   position?: { right: number };
 }
 
-export function ChatWindow({ friend, chatId, onClose, onMinimize, position = { right: 288 } }: ChatWindowProps) {
+export function ChatWindow({ friend, onClose, onMinimize, position = { right: 288 } }: ChatWindowProps) {
   const [message, setMessage] = useState("");
   const [messages, setMessages] = useState<ChatMessage[]>(() => dummyMessages[friend.id] || []);
   const messagesEndRef = useRef<HTMLDivElement>(null);
@@ -119,7 +119,7 @@ export function ChatWindow({ friend, chatId, onClose, onMinimize, position = { r
 
       {/* Messages */}
       <div className="flex-1 overflow-y-auto h-[calc(100%-8rem)] p-4 space-y-4">
-        {messages.map((msg, index) => (
+        {messages.map((msg) => (
           <div
             key={msg.id}
             className={`flex ${msg.senderId === "me" ? "justify-end" : "justify-start"}`}

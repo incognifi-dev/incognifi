@@ -11,9 +11,17 @@ interface TitleBarProps {
   onTabClick: (id: string) => void;
   onTabClose: (id: string) => void;
   onNewTab: () => void;
+  onOpenHistory: () => void;
 }
 
-export const TitleBar: React.FC<TitleBarProps> = ({ tabs, activeTabId, onTabClick, onTabClose, onNewTab }) => {
+export const TitleBar: React.FC<TitleBarProps> = ({
+  tabs,
+  activeTabId,
+  onTabClick,
+  onTabClose,
+  onNewTab,
+  onOpenHistory,
+}) => {
   const [isVPNDropdownOpen, setIsVPNDropdownOpen] = useState(false);
   const [isSettingsDropdownOpen, setIsSettingsDropdownOpen] = useState(false);
 
@@ -115,6 +123,7 @@ export const TitleBar: React.FC<TitleBarProps> = ({ tabs, activeTabId, onTabClic
           <SettingsDropdown
             isOpen={isSettingsDropdownOpen}
             onClose={() => setIsSettingsDropdownOpen(false)}
+            onOpenHistory={onOpenHistory}
           />
         </div>
       </div>
