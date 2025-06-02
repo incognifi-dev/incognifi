@@ -46,8 +46,14 @@ export function UsernameSetupModal({ onComplete, onClose }: UsernameSetupModalPr
           <FiX className="w-5 h-5" />
         </button>
 
-        <h2 className="text-xl font-semibold text-white mb-1">Welcome to Chat!</h2>
-        <p className="text-gray-400 mb-6">Choose a username to get started</p>
+        <h2 className="text-xl font-semibold text-white mb-1">Chat Feature Demo</h2>
+        <p className="text-gray-400 mb-2">Coming Soon - Try our chat demo!</p>
+        <div className="bg-violet-600/20 border border-violet-500/30 rounded-lg p-3 mb-6">
+          <p className="text-violet-300 text-sm">
+            🚀 This is a preview of our upcoming social features. The chat system shown here is a demonstration of how
+            it will work when fully released.
+          </p>
+        </div>
 
         <form
           onSubmit={handleSubmit}

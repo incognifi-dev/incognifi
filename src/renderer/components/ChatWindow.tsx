@@ -141,13 +141,19 @@ export function ChatWindow({ friend, chatId, onClose, onMinimize, position = { r
 
       {/* Input */}
       <div className="absolute bottom-0 left-0 right-0 p-3 bg-gray-900/95 backdrop-blur-sm border-t border-gray-800">
+        <div className="flex items-center justify-between mb-2">
+          <div className="flex items-center space-x-2">
+            <div className="w-2 h-2 bg-violet-500 rounded-full animate-pulse"></div>
+            <span className="text-xs text-violet-400">Demo Chat - Coming Soon</span>
+          </div>
+        </div>
         <div className="flex items-end space-x-2">
           <textarea
             ref={inputRef}
             value={message}
             onChange={(e) => setMessage(e.target.value)}
             onKeyPress={handleKeyPress}
-            placeholder="Type a message..."
+            placeholder="Try our demo chat..."
             className="flex-1 bg-gray-800 border border-gray-700 rounded-lg px-3 py-2 text-white placeholder-gray-400 focus:outline-none focus:border-violet-500 focus:ring-1 focus:ring-violet-500 max-h-32 min-h-[2.5rem] resize-none"
             rows={1}
           />

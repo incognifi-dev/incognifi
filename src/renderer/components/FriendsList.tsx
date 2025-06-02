@@ -135,10 +135,14 @@ export function FriendsList({ friends, onChatStart }: FriendsListProps) {
 
       {/* Add Friend Button */}
       <div className="p-4 border-t border-gray-800">
-        <button className="w-full py-2 px-4 bg-violet-600 hover:bg-violet-700 text-white rounded-lg font-medium transition-colors flex items-center justify-center space-x-2">
+        <button
+          className="w-full py-2 px-4 bg-gray-700 text-gray-400 rounded-lg font-medium transition-colors flex items-center justify-center space-x-2 cursor-not-allowed"
+          disabled
+        >
           <FiPlus className="w-5 h-5" />
-          <span>Add Friend</span>
+          <span>Add Friend (Demo)</span>
         </button>
+        <p className="text-xs text-gray-500 text-center mt-2">Coming soon in full release</p>
       </div>
     </div>
   );

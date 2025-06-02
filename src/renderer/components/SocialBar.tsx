@@ -122,7 +122,7 @@ export function SocialBar() {
               <div className={`absolute -top-1 -right-1 w-2 h-2 rounded-full ${getStatusColor(userData.status)}`} />
             )}
           </div>
-          <span className="text-sm font-medium">Chat</span>
+          <span className="text-sm font-medium">Chat Demo</span>
         </button>
 
         {/* Active Chats */}
@@ -183,7 +183,10 @@ export function SocialBar() {
             className="fixed bottom-12 right-4 w-64 bg-gray-900 rounded-t-lg overflow-hidden shadow-lg border border-gray-800"
           >
             <div className="p-4 border-b border-gray-800 flex items-center justify-between">
-              <h3 className="text-white font-medium">Friends</h3>
+              <div>
+                <h3 className="text-white font-medium">Friends Demo</h3>
+                <p className="text-xs text-violet-400">Coming Soon Feature</p>
+              </div>
               <button
                 onClick={() => setIsChatOpen(false)}
                 className="text-gray-400 hover:text-white transition-colors"
