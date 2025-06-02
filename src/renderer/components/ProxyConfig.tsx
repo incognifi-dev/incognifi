@@ -134,7 +134,7 @@ export function ProxyConfig({ isOpen, onClose }: ProxyConfigProps) {
               <div className="flex items-center justify-between">
                 <div className="flex items-center">
                   <FiSettings className="w-5 h-5 text-white mr-2" />
-                  <h3 className="text-white font-medium">SOCKS Proxy Configuration</h3>
+                  <h3 className="text-white font-medium">Custom Proxy Configuration</h3>
                 </div>
                 <button
                   onClick={onClose}

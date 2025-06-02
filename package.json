@@ -45,7 +45,8 @@
     "react": "^18.2.0",
     "react-dom": "^18.2.0",
     "react-icons": "^5.0.1",
-    "systeminformation": "^5.27.1"
+    "systeminformation": "^5.27.1",
+    "zustand": "^5.0.5"
   },
   "build": {
     "appId": "com.icognifi.browser",

@@ -262,17 +262,53 @@ export default function App() {
       const handleDidFailLoad = (event: any) => {
         // Only handle main frame errors, not subframe errors
         if (event.isMainFrame) {
-          console.error("Webview failed to load:", event);
-          updateTab(activeTabId, {
-            title: `Error: ${event.errorCode}`,
-            isLoading: false,
-            state: "error",
-            error: {
-              code: event.errorCode,
-              description: event.errorDescription,
-              validatedURL: event.validatedURL,
-            },
-          });
+          // Filter out internal Electron errors that shouldn't show error pages
+          const ignoredErrorCodes = [
+            "GUEST_VIEW_MANAGER_CALL",
+            "ERR_ABORTED", // When user navigates away before page loads
+            "ERR_FAILED", // Generic failure that's often not user-facing
+          ];
+
+          // Only show error page for actual navigation/network errors
+          const userFacingErrorCodes = [
+            "ERR_CERT_AUTHORITY_INVALID",
+            "ERR_CERT_COMMON_NAME_INVALID",
+            "ERR_CERT_DATE_INVALID",
+            "ERR_INTERNET_DISCONNECTED",
+            "ERR_NETWORK_CHANGED",
+            "ERR_NAME_NOT_RESOLVED",
+            "ERR_CONNECTION_REFUSED",
+            "ERR_TIMED_OUT",
+            "ERR_SSL_PROTOCOL_ERROR",
+            "ERR_CERT_INVALID",
+            "ERR_CONNECTION_RESET",
+            "ERR_CONNECTION_CLOSED",
+            "ERR_ADDRESS_UNREACHABLE",
+            "ERR_PROXY_CONNECTION_FAILED",
+          ];
+
+          if (ignoredErrorCodes.includes(event.errorCode)) {
+            console.log("Ignoring internal error:", event.errorCode);
+            return;
+          }
+
+          // Only show error page for known user-facing errors or if it's a significant error
+          if (userFacingErrorCodes.includes(event.errorCode) || event.errorCode.startsWith("ERR_")) {
+            console.error("Webview failed to load:", event);
+            updateTab(activeTabId, {
+              title: `Error: ${event.errorCode}`,
+              isLoading: false,
+              state: "error",
+              error: {
+                code: event.errorCode,
+                description: event.errorDescription,
+                validatedURL: event.validatedURL,
+              },
+            });
+          } else {
+            // Log other errors but don't show error page
+            console.log("Non-critical webview error:", event.errorCode, event.errorDescription);
+          }
         }
       };
 

@@ -29,8 +29,9 @@ interface Server {
   country: string;
   city: string;
   ip: string;
-  ping: number;
-  load: number;
+  port: number;
+  ping: number | null;
+  load: number | null;
 }
 
 interface ProxyConfigType {
@@ -42,24 +43,31 @@ interface ProxyConfigType {
   password?: string;
 }
 
-// Dummy data for now
-const INITIAL_SERVER = {
-  id: "nl1",
-  country: "Netherlands",
-  city: "Amsterdam",
-  ip: "185.93.1.96",
-  ping: 28,
-  load: 65,
+// Updated initial server to match new format
+const INITIAL_SERVER: Server = {
+  id: "custom_1",
+  country: "N/A",
+  city: "N/A",
+  ip: "127.0.0.1",
+  port: 8080,
+  ping: null,
+  load: null,
 };
 
-const DUMMY_VPN_STATE = {
+interface VPNState {
+  isConnected: boolean;
+  signalStrength: number;
+  currentServer: Server;
+}
+
+const DUMMY_VPN_STATE: VPNState = {
   isConnected: true,
   signalStrength: 85,
   currentServer: INITIAL_SERVER,
 };
 
 export function VPNDropdown({ isOpen, onClose }: VPNDropdownProps) {
-  const [vpnState, setVpnState] = React.useState(DUMMY_VPN_STATE);
+  const [vpnState, setVpnState] = React.useState<VPNState>(DUMMY_VPN_STATE);
   const [isLoading, setIsLoading] = React.useState(false);
   const [showServerList, setShowServerList] = React.useState(false);
   const [showProxyConfig, setShowProxyConfig] = React.useState(false);
@@ -159,15 +167,71 @@ export function VPNDropdown({ isOpen, onClose }: VPNDropdownProps) {
 
   const toggleConnection = async () => {
     if (vpnState.isConnected) {
-      // Immediate disconnect
-      setVpnState((prev) => ({ ...prev, isConnected: false }));
-    } else {
-      // Show loading state
+      // When disconnecting, disable the proxy as well
       setIsLoading(true);
-      // Simulate connection delay
-      await new Promise((resolve) => setTimeout(resolve, 1500));
-      setIsLoading(false);
-      setVpnState((prev) => ({ ...prev, isConnected: true }));
+
+      try {
+        // Disable proxy first
+        const updatedProxyConfig = {
+          ...proxyConfig,
+          enabled: false,
+        };
+
+        setProxyConfig(updatedProxyConfig);
+
+        // Save the disabled proxy configuration
+        const result = await ipcRenderer.invoke("set-proxy-config", updatedProxyConfig);
+
+        if (result.success) {
+          setProxyMessage({ type: "success", text: "Proxy disabled and VPN disconnected" });
+          setTimeout(() => setProxyMessage(null), 3000);
+        }
+
+        // Immediate disconnect
+        setVpnState((prev) => ({ ...prev, isConnected: false }));
+      } catch (error) {
+        console.error("Failed to disable proxy:", error);
+        setProxyMessage({ type: "error", text: "Failed to disable proxy" });
+        // Still disconnect VPN even if proxy disable fails
+        setVpnState((prev) => ({ ...prev, isConnected: false }));
+      } finally {
+        setIsLoading(false);
+      }
+    } else {
+      // When connecting, enable the proxy as well
+      setIsLoading(true);
+
+      try {
+        // Enable proxy first
+        const updatedProxyConfig = {
+          ...proxyConfig,
+          enabled: true,
+        };
+
+        setProxyConfig(updatedProxyConfig);
+
+        // Save the enabled proxy configuration
+        const result = await ipcRenderer.invoke("set-proxy-config", updatedProxyConfig);
+
+        if (result.success) {
+          setProxyMessage({ type: "success", text: "Proxy enabled and VPN connected" });
+          setTimeout(() => setProxyMessage(null), 3000);
+        }
+
+        // Simulate connection delay
+        await new Promise((resolve) => setTimeout(resolve, 1500));
+
+        // Connect VPN
+        setVpnState((prev) => ({ ...prev, isConnected: true }));
+      } catch (error) {
+        console.error("Failed to enable proxy:", error);
+        setProxyMessage({ type: "error", text: "Failed to enable proxy" });
+        // Still connect VPN even if proxy enable fails
+        await new Promise((resolve) => setTimeout(resolve, 1500));
+        setVpnState((prev) => ({ ...prev, isConnected: true }));
+      } finally {
+        setIsLoading(false);
+      }
     }
   };
 
@@ -175,14 +239,44 @@ export function VPNDropdown({ isOpen, onClose }: VPNDropdownProps) {
     setShowServerList(false);
     if (server.id !== vpnState.currentServer.id) {
       setIsLoading(true);
-      // Simulate server switch delay
-      await new Promise((resolve) => setTimeout(resolve, 1000));
-      setVpnState((prev) => ({
-        ...prev,
-        currentServer: server,
-        isConnected: true,
-      }));
-      setIsLoading(false);
+
+      try {
+        // Update VPN state
+        setVpnState((prev) => ({
+          ...prev,
+          currentServer: server,
+          isConnected: true,
+        }));
+
+        // Update proxy configuration with selected server and enable it
+        const updatedProxyConfig = {
+          ...proxyConfig,
+          host: server.ip,
+          port: server.port,
+          type: "http" as const, // Since we're fetching from HTTP proxy list
+          enabled: true, // Automatically enable proxy when server is selected
+        };
+
+        setProxyConfig(updatedProxyConfig);
+
+        // Automatically save and enable the proxy configuration
+        const result = await ipcRenderer.invoke("set-proxy-config", updatedProxyConfig);
+
+        if (result.success) {
+          setProxyMessage({ type: "success", text: `Proxy enabled and updated to ${server.ip}:${server.port}` });
+          setTimeout(() => setProxyMessage(null), 3000);
+        } else {
+          setProxyMessage({ type: "error", text: "Failed to update proxy configuration" });
+        }
+
+        // Simulate server switch delay
+        await new Promise((resolve) => setTimeout(resolve, 1000));
+      } catch (error) {
+        console.error("Failed to update proxy configuration:", error);
+        setProxyMessage({ type: "error", text: "Failed to update proxy configuration" });
+      } finally {
+        setIsLoading(false);
+      }
     }
   };
 
@@ -231,7 +325,7 @@ export function VPNDropdown({ isOpen, onClose }: VPNDropdownProps) {
             <div className="bg-gradient-to-r from-violet-600 to-indigo-600 px-4 py-3">
               <div className="flex items-center justify-between">
                 <h3 className="text-white font-medium">
-                  {showProxyConfig ? "SOCKS Proxy Configuration" : "VPN Connection"}
+                  {showProxyConfig ? "Custom Proxy Configuration" : "VPN Connection"}
                 </h3>
                 <motion.div
                   animate={{
@@ -280,7 +374,7 @@ export function VPNDropdown({ isOpen, onClose }: VPNDropdownProps) {
                   className="h-[400px] overflow-y-auto"
                 >
                   <div className="flex items-center justify-between px-4 py-2 border-b border-gray-200">
-                    <h4 className="font-medium text-gray-700">SOCKS Proxy Settings</h4>
+                    <h4 className="font-medium text-gray-700">Custom Proxy Settings</h4>
                     <button
                       onClick={() => setShowProxyConfig(false)}
                       className="p-1 hover:bg-gray-100 rounded-full transition-colors"
@@ -495,7 +589,9 @@ export function VPNDropdown({ isOpen, onClose }: VPNDropdownProps) {
                       {/* IP Address */}
                       <div className="flex items-center justify-between">
                         <span className="text-gray-600">IP Address</span>
-                        <span className="font-medium text-gray-800">{vpnState.currentServer.ip}</span>
+                        <span className="font-medium text-gray-800">
+                          {vpnState.currentServer.ip}:{vpnState.currentServer.port}
+                        </span>
                       </div>
                     </div>
                   )}
@@ -548,13 +644,13 @@ export function VPNDropdown({ isOpen, onClose }: VPNDropdownProps) {
                       </button>
                     )}
 
-                    {/* Proxy Configuration Button */}
+                    {/* Custom Proxy Configuration Button */}
                     <button
                       onClick={() => setShowProxyConfig(true)}
                       className="w-full py-2 px-4 rounded-lg font-medium border border-gray-200 text-gray-600 hover:bg-gray-50 transition-colors flex items-center justify-center"
                     >
                       <FiSettings className="w-4 h-4 mr-2" />
-                      SOCKS Proxy Settings
+                      Custom Proxy Settings
                     </button>
                   </div>
                 </motion.div>
