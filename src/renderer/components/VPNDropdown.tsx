@@ -1,7 +1,9 @@
 import React from "react";
 import { motion, AnimatePresence } from "framer-motion";
-import { FiActivity, FiRefreshCw, FiX } from "react-icons/fi";
+import { FiActivity, FiRefreshCw, FiX, FiMapPin, FiSettings, FiWifi, FiWifiOff, FiChevronRight } from "react-icons/fi";
 import { ServerList } from "./ServerList";
+import { NetworkStats } from "./NetworkStats";
+import { ProxyConfig } from "./ProxyConfig";
 
 interface VPNDropdownProps {
   isOpen: boolean;
@@ -37,6 +39,7 @@ export function VPNDropdown({ isOpen, onClose }: VPNDropdownProps) {
   const [vpnState, setVpnState] = React.useState(DUMMY_VPN_STATE);
   const [isLoading, setIsLoading] = React.useState(false);
   const [showServerList, setShowServerList] = React.useState(false);
+  const [showProxyConfig, setShowProxyConfig] = React.useState(false);
 
   const toggleConnection = async () => {
     if (vpnState.isConnected) {
@@ -254,11 +257,31 @@ export function VPNDropdown({ isOpen, onClose }: VPNDropdownProps) {
                         Switch Server
                       </button>
                     )}
+
+                    {/* Proxy Configuration Button */}
+                    <button
+                      onClick={() => setShowProxyConfig(true)}
+                      className="w-full py-2 px-4 rounded-lg font-medium border border-gray-200 text-gray-600 hover:bg-gray-50 transition-colors flex items-center justify-center"
+                    >
+                      <FiSettings className="w-4 h-4 mr-2" />
+                      SOCKS Proxy Settings
+                    </button>
+                  </div>
+
+                  {/* Network Stats */}
+                  <div className="mt-4 pt-4 border-t border-gray-200">
+                    <NetworkStats className="text-xs" />
                   </div>
                 </motion.div>
               )}
             </AnimatePresence>
           </motion.div>
+
+          {/* Proxy Configuration Modal */}
+          <ProxyConfig
+            isOpen={showProxyConfig}
+            onClose={() => setShowProxyConfig(false)}
+          />
         </>
       )}
     </AnimatePresence>

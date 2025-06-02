@@ -26,3 +26,12 @@ export interface Tab {
   canGoForward: boolean;
   state: TabState;
 }
+
+export interface ProxyConfig {
+  enabled: boolean;
+  host: string;
+  port: number;
+  username?: string;
+  password?: string;
+  type: "socks5" | "socks4" | "http";
+}

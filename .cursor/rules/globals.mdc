@@ -1,0 +1,7 @@
+---
+description: 
+globs: 
+alwaysApply: true
+---
+I am always running my development server, so never suggest running it to test the changes.
+Always use pnpm as far as package managers.

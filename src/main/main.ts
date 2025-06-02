@@ -1,5 +1,6 @@
-import { app, BrowserWindow, Menu, dialog, ipcMain } from "electron";
+import { app, BrowserWindow, Menu, dialog, ipcMain, session } from "electron";
 import path from "path";
+import fs from "fs";
 import si from "systeminformation";
 
 // Set the app name
@@ -9,6 +10,53 @@ app.name = "IcogniFi";
 let networkBaseline: any = null;
 let lastNetworkStats: any = null;
 let sessionStartTime: number = 0;
+
+// Proxy state
+interface ProxyConfig {
+  enabled: boolean;
+  host: string;
+  port: number;
+  username?: string;
+  password?: string;
+  type: "socks5" | "socks4" | "http";
+}
+
+// Load proxy config from storage or use defaults
+function loadProxyConfig(): ProxyConfig {
+  try {
+    const stored = app.getPath("userData");
+    const configPath = path.join(stored, "proxy-config.json");
+
+    if (fs.existsSync(configPath)) {
+      const data = fs.readFileSync(configPath, "utf8");
+      return JSON.parse(data);
+    }
+  } catch (error) {
+    console.error("Failed to load proxy config:", error);
+  }
+
+  return {
+    enabled: false,
+    host: "127.0.0.1",
+    port: 1080,
+    type: "socks5",
+  };
+}
+
+// Save proxy config to storage
+function saveProxyConfig(config: ProxyConfig) {
+  try {
+    const stored = app.getPath("userData");
+    const configPath = path.join(stored, "proxy-config.json");
+
+    fs.writeFileSync(configPath, JSON.stringify(config, null, 2));
+    console.log("Proxy config saved:", config);
+  } catch (error) {
+    console.error("Failed to save proxy config:", error);
+  }
+}
+
+let currentProxyConfig: ProxyConfig = loadProxyConfig();
 
 // Initialize network monitoring baseline
 async function initializeNetworkMonitoring() {
@@ -120,6 +168,65 @@ async function getNetworkStats() {
   }
 }
 
+// Function to configure proxy for webview sessions
+async function configureProxy(config: ProxyConfig) {
+  console.log("Configuring proxy with config:", config);
+  const webviewSession = session.fromPartition("persist:webview");
+
+  if (config.enabled) {
+    let proxyRules = "";
+
+    if (config.username && config.password) {
+      // For authenticated proxies
+      proxyRules =
+        config.type === "socks5"
+          ? `socks5://${config.username}:${config.password}@${config.host}:${config.port}`
+          : config.type === "socks4"
+          ? `socks4://${config.username}:${config.password}@${config.host}:${config.port}`
+          : `http://${config.username}:${config.password}@${config.host}:${config.port}`;
+    } else {
+      // For non-authenticated proxies
+      proxyRules =
+        config.type === "socks5"
+          ? `socks5://${config.host}:${config.port}`
+          : config.type === "socks4"
+          ? `socks4://${config.host}:${config.port}`
+          : `http://${config.host}:${config.port}`;
+    }
+
+    try {
+      await webviewSession.setProxy({
+        proxyRules: proxyRules,
+        proxyBypassRules: "localhost,127.0.0.1,::1",
+      });
+
+      console.log(`Proxy configured successfully: ${proxyRules}`);
+      return { success: true, message: `Proxy enabled: ${config.type}://${config.host}:${config.port}` };
+    } catch (error) {
+      console.error("Failed to configure proxy:", error);
+      return {
+        success: false,
+        message: "Failed to configure proxy: " + (error instanceof Error ? error.message : String(error)),
+      };
+    }
+  } else {
+    try {
+      await webviewSession.setProxy({
+        proxyRules: "direct://",
+      });
+
+      console.log("Proxy disabled successfully");
+      return { success: true, message: "Proxy disabled" };
+    } catch (error) {
+      console.error("Failed to disable proxy:", error);
+      return {
+        success: false,
+        message: "Failed to disable proxy: " + (error instanceof Error ? error.message : String(error)),
+      };
+    }
+  }
+}
+
 function createWindow() {
   const mainWindow = new BrowserWindow({
     width: 1200,
@@ -160,6 +267,57 @@ function createWindow() {
   // Set up IPC handler for network stats
   ipcMain.handle("get-network-stats", async () => {
     return await getNetworkStats();
+  });
+
+  // Set up IPC handlers for proxy management
+  ipcMain.handle("get-proxy-config", async () => {
+    console.log("Getting proxy config:", currentProxyConfig);
+    return currentProxyConfig;
+  });
+
+  ipcMain.handle("set-proxy-config", async (event, config: ProxyConfig) => {
+    console.log("Setting proxy config:", config);
+    console.log("Previous config was:", currentProxyConfig);
+    currentProxyConfig = { ...config };
+    saveProxyConfig(currentProxyConfig);
+    const result = await configureProxy(currentProxyConfig);
+    console.log("Proxy configuration result:", result);
+    console.log("New current config is:", currentProxyConfig);
+    return result;
+  });
+
+  ipcMain.handle("toggle-proxy", async () => {
+    console.log("Toggling proxy. Current state:", currentProxyConfig.enabled);
+    console.log("Current config before toggle:", currentProxyConfig);
+    currentProxyConfig.enabled = !currentProxyConfig.enabled;
+    saveProxyConfig(currentProxyConfig);
+    const result = await configureProxy(currentProxyConfig);
+    console.log("Proxy toggle result:", result, "New state:", currentProxyConfig.enabled);
+    console.log("Final config after toggle:", currentProxyConfig);
+    return { ...result, enabled: currentProxyConfig.enabled };
+  });
+
+  ipcMain.handle("test-proxy-connection", async () => {
+    // Basic proxy connection test
+    try {
+      const testSession = session.fromPartition("test-proxy");
+      if (currentProxyConfig.enabled) {
+        const proxyRules =
+          currentProxyConfig.type === "socks5"
+            ? `socks5://${currentProxyConfig.host}:${currentProxyConfig.port}`
+            : currentProxyConfig.type === "socks4"
+            ? `socks4://${currentProxyConfig.host}:${currentProxyConfig.port}`
+            : `http://${currentProxyConfig.host}:${currentProxyConfig.port}`;
+
+        await testSession.setProxy({
+          proxyRules: proxyRules,
+        });
+      }
+
+      return { success: true, message: "Proxy connection successful" };
+    } catch (error) {
+      return { success: false, message: "Proxy connection failed" };
+    }
   });
 
   // Create the application menu
@@ -224,6 +382,14 @@ function createWindow() {
     // In production, load the built files
     mainWindow.loadFile(path.resolve(__dirname, "..", "renderer", "index.html"));
   }
+
+  // Initialize proxy configuration if it was previously enabled
+  if (currentProxyConfig.enabled) {
+    console.log("Initializing proxy with saved config...");
+    configureProxy(currentProxyConfig).then((result) => {
+      console.log("Proxy initialization result:", result);
+    });
+  }
 }
 
 app.whenReady().then(() => {
@@ -249,4 +415,8 @@ app.on("window-all-closed", () => {
 app.on("before-quit", () => {
   ipcMain.removeAllListeners("clear-storage");
   ipcMain.removeAllListeners("get-network-stats");
+  ipcMain.removeAllListeners("get-proxy-config");
+  ipcMain.removeAllListeners("set-proxy-config");
+  ipcMain.removeAllListeners("toggle-proxy");
+  ipcMain.removeAllListeners("test-proxy-connection");
 });
