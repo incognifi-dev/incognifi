@@ -13,6 +13,11 @@ interface NavigationBarProps {
   onAddBookmark: () => void;
   onInputFocus: () => void;
   onInputBlur: () => void;
+  onNavigate?: (url: string) => void;
+  onRefresh?: () => void;
+  onGoBack?: () => void;
+  onGoForward?: () => void;
+  onGoHome?: () => void;
 }
 
 export function NavigationBar({
@@ -26,6 +31,11 @@ export function NavigationBar({
   onAddBookmark,
   onInputFocus,
   onInputBlur,
+  onNavigate,
+  onRefresh,
+  onGoBack,
+  onGoForward,
+  onGoHome,
 }: NavigationBarProps) {
   const [inputValue, setInputValue] = useState(displayUrl);
 
@@ -42,26 +52,46 @@ export function NavigationBar({
       if (!urlToLoad.startsWith("http://") && !urlToLoad.startsWith("https://")) {
         urlToLoad = `https://${urlToLoad}`;
       }
-      webview.loadURL(urlToLoad);
+      if (onNavigate) {
+        onNavigate(urlToLoad);
+      } else {
+        webview.loadURL(urlToLoad);
+      }
       inputRef.current?.blur();
     }
   };
 
   const handleRefresh = () => {
-    webviewRef.current?.reload();
+    if (onRefresh) {
+      onRefresh();
+    } else {
+      webviewRef.current?.reload();
+    }
   };
 
   const goBack = () => {
-    webviewRef.current?.goBack();
+    if (onGoBack) {
+      onGoBack();
+    } else {
+      webviewRef.current?.goBack();
+    }
   };
 
   const goForward = () => {
-    webviewRef.current?.goForward();
+    if (onGoForward) {
+      onGoForward();
+    } else {
+      webviewRef.current?.goForward();
+    }
   };
 
   const goHome = () => {
-    const homeUrl = "https://www.google.com";
-    webviewRef.current?.loadURL(homeUrl);
+    if (onGoHome) {
+      onGoHome();
+    } else {
+      const homeUrl = "https://www.google.com";
+      webviewRef.current?.loadURL(homeUrl);
+    }
   };
 
   return (

@@ -14,7 +14,7 @@ export interface HistoryEntry {
   visitCount: number;
 }
 
-export type TabState = "normal" | "splash" | "history";
+export type TabState = "normal" | "splash" | "history" | "error";
 
 export interface Tab {
   id: string;
@@ -25,6 +25,11 @@ export interface Tab {
   canGoBack: boolean;
   canGoForward: boolean;
   state: TabState;
+  error?: {
+    code: string;
+    description: string;
+    validatedURL: string;
+  };
 }
 
 export interface ProxyConfig {

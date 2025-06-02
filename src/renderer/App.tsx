@@ -5,6 +5,7 @@ import { BookmarksBar } from "./components/BookmarksBar";
 import { TitleBar } from "./components/TitleBar";
 import { SocialBar } from "./components/SocialBar";
 import { HistoryPage } from "./components/HistoryPage";
+import { ErrorPage } from "./components/ErrorPage";
 import { Bookmark, Tab, HistoryEntry } from "./types";
 import { defaultBookmarks } from "./data/defaultBookmarks";
 import icognifiLogo from "./assets/icognifi-alpha.png";
@@ -213,7 +214,8 @@ export default function App() {
           title: currentTitle || "New Tab",
           canGoBack: webview.canGoBack(),
           canGoForward: webview.canGoForward(),
-          state: activeTab.state === "splash" ? "normal" : activeTab.state,
+          state: activeTab.state === "splash" ? "normal" : activeTab.state === "error" ? "normal" : activeTab.state,
+          error: undefined,
         });
 
         // Add to history when navigation completes
@@ -225,7 +227,8 @@ export default function App() {
       const handlePageTitleUpdated = (e: any) => {
         updateTab(activeTabId, {
           title: e.title || "New Tab",
-          state: activeTab.state === "splash" ? "normal" : activeTab.state,
+          state: activeTab.state === "splash" ? "normal" : activeTab.state === "error" ? "normal" : activeTab.state,
+          error: undefined,
         });
 
         // Update history with new title
@@ -238,7 +241,8 @@ export default function App() {
       const handlePageFaviconUpdated = (e: any) => {
         updateTab(activeTabId, {
           favicon: e.favicons[0],
-          state: activeTab.state === "splash" ? "normal" : activeTab.state,
+          state: activeTab.state === "splash" ? "normal" : activeTab.state === "error" ? "normal" : activeTab.state,
+          error: undefined,
         });
       };
 
@@ -249,7 +253,25 @@ export default function App() {
           updateTab(activeTabId, {
             title: currentTitle || "New Tab",
             url: currentUrl,
-            state: activeTab.state === "splash" ? "normal" : activeTab.state,
+            state: activeTab.state === "splash" ? "normal" : activeTab.state === "error" ? "normal" : activeTab.state,
+            error: undefined,
+          });
+        }
+      };
+
+      const handleDidFailLoad = (event: any) => {
+        // Only handle main frame errors, not subframe errors
+        if (event.isMainFrame) {
+          console.error("Webview failed to load:", event);
+          updateTab(activeTabId, {
+            title: `Error: ${event.errorCode}`,
+            isLoading: false,
+            state: "error",
+            error: {
+              code: event.errorCode,
+              description: event.errorDescription,
+              validatedURL: event.validatedURL,
+            },
           });
         }
       };
@@ -261,6 +283,7 @@ export default function App() {
       webview.addEventListener("page-title-updated", handlePageTitleUpdated);
       webview.addEventListener("page-favicon-updated", handlePageFaviconUpdated);
       webview.addEventListener("dom-ready", handleDomReady);
+      webview.addEventListener("did-fail-load", handleDidFailLoad);
 
       return () => {
         webview.removeEventListener("did-start-loading", handleStartLoading);
@@ -270,6 +293,7 @@ export default function App() {
         webview.removeEventListener("page-title-updated", handlePageTitleUpdated);
         webview.removeEventListener("page-favicon-updated", handlePageFaviconUpdated);
         webview.removeEventListener("dom-ready", handleDomReady);
+        webview.removeEventListener("did-fail-load", handleDidFailLoad);
       };
     }
   }, [activeTabId, activeTab?.state]);
@@ -306,6 +330,95 @@ export default function App() {
     }
   };
 
+  const handleErrorRetry = () => {
+    const webview = webviewRefs.current[activeTabId]?.current;
+    if (webview && activeTab.error) {
+      // Clear the error state and retry loading
+      updateTab(activeTabId, {
+        state: "normal",
+        error: undefined,
+        isLoading: true,
+      });
+      webview.reload();
+    }
+  };
+
+  const handleErrorGoBack = () => {
+    const webview = webviewRefs.current[activeTabId]?.current;
+    if (webview && activeTab.canGoBack) {
+      // Clear the error state and go back
+      updateTab(activeTabId, {
+        state: "normal",
+        error: undefined,
+      });
+      webview.goBack();
+    }
+  };
+
+  const handleNavigate = (url: string) => {
+    const webview = webviewRefs.current[activeTabId]?.current;
+    if (webview) {
+      // Clear error state before navigation
+      updateTab(activeTabId, {
+        state: "normal",
+        error: undefined,
+        isLoading: true,
+      });
+      webview.loadURL(url);
+    }
+  };
+
+  const handleRefresh = () => {
+    const webview = webviewRefs.current[activeTabId]?.current;
+    if (webview) {
+      // Clear error state before refresh
+      updateTab(activeTabId, {
+        state: "normal",
+        error: undefined,
+        isLoading: true,
+      });
+      webview.reload();
+    }
+  };
+
+  const handleGoBack = () => {
+    const webview = webviewRefs.current[activeTabId]?.current;
+    if (webview && activeTab.canGoBack) {
+      // Clear error state before going back
+      updateTab(activeTabId, {
+        state: "normal",
+        error: undefined,
+      });
+      webview.goBack();
+    }
+  };
+
+  const handleGoForward = () => {
+    const webview = webviewRefs.current[activeTabId]?.current;
+    if (webview && activeTab.canGoForward) {
+      // Clear error state before going forward
+      updateTab(activeTabId, {
+        state: "normal",
+        error: undefined,
+      });
+      webview.goForward();
+    }
+  };
+
+  const handleGoHome = () => {
+    const webview = webviewRefs.current[activeTabId]?.current;
+    if (webview) {
+      // Clear error state before going home
+      updateTab(activeTabId, {
+        state: "normal",
+        error: undefined,
+        isLoading: true,
+      });
+      const homeUrl = "https://www.google.com";
+      webview.loadURL(homeUrl);
+    }
+  };
+
   return (
     <div className="flex flex-col h-screen bg-white">
       <TitleBar
@@ -330,6 +443,11 @@ export default function App() {
             onAddBookmark={addBookmark}
             onInputFocus={() => {}}
             onInputBlur={() => {}}
+            onNavigate={handleNavigate}
+            onRefresh={handleRefresh}
+            onGoBack={handleGoBack}
+            onGoForward={handleGoForward}
+            onGoHome={handleGoHome}
           />
 
           <BookmarksBar
@@ -342,6 +460,13 @@ export default function App() {
                 updateTab(activeTabId, {
                   state: "normal",
                 });
+              } else if (activeTab.state === "error") {
+                // Clear error state before bookmark navigation
+                updateTab(activeTabId, {
+                  state: "normal",
+                  error: undefined,
+                  isLoading: true,
+                });
               }
               if (webview) {
                 webview.loadURL(url);
@@ -351,7 +476,7 @@ export default function App() {
         </>
       )}
 
-      {/* Webviews and History Page */}
+      {/* Webviews, History Page, and Error Pages */}
       <div className="flex-1 bg-white relative overflow-hidden">
         {tabs.map((tab) => {
           if (tab.state === "history") {
@@ -365,6 +490,22 @@ export default function App() {
                   onHistoryClick={handleHistoryClick}
                   onRemoveHistoryEntry={removeHistoryEntry}
                   onClearHistory={clearHistory}
+                />
+              </div>
+            );
+          }
+
+          if (tab.state === "error" && tab.error) {
+            return (
+              <div
+                key={tab.id}
+                className={`h-full w-full ${tab.id === activeTabId ? "block" : "hidden"}`}
+              >
+                <ErrorPage
+                  error={tab.error}
+                  onRetry={handleErrorRetry}
+                  onGoBack={handleErrorGoBack}
+                  canGoBack={tab.canGoBack}
                 />
               </div>
             );
