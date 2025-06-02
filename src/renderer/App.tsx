@@ -320,7 +320,6 @@ export default function App() {
       {activeTab?.state !== "history" && (
         <>
           <NavigationBar
-            inputUrl={activeTab.state === "splash" ? "icognifi://home" : activeTab.url}
             displayUrl={activeTab.state === "splash" ? "icognifi://home" : activeTab.url}
             isLoading={activeTab.isLoading}
             canGoBack={activeTab.canGoBack}
@@ -328,7 +327,6 @@ export default function App() {
             bookmarks={bookmarks}
             inputRef={inputRef}
             webviewRef={webviewRefs.current[activeTabId]!}
-            onUrlChange={(url) => updateTab(activeTabId, { url })}
             onAddBookmark={addBookmark}
             onInputFocus={() => {}}
             onInputBlur={() => {}}

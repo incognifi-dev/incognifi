@@ -1,8 +1,8 @@
 import { FiArrowLeft, FiArrowRight, FiRefreshCw, FiHome, FiLock, FiSearch, FiStar } from "react-icons/fi";
 import type { WebviewTag } from "electron";
+import { useState, useEffect } from "react";
 
 interface NavigationBarProps {
-  inputUrl: string;
   displayUrl: string;
   isLoading: boolean;
   canGoBack: boolean;
@@ -10,14 +10,12 @@ interface NavigationBarProps {
   bookmarks: Array<{ url: string }>;
   inputRef: React.RefObject<HTMLInputElement>;
   webviewRef: React.RefObject<WebviewTag>;
-  onUrlChange: (url: string) => void;
   onAddBookmark: () => void;
   onInputFocus: () => void;
   onInputBlur: () => void;
 }
 
 export function NavigationBar({
-  inputUrl,
   displayUrl,
   isLoading,
   canGoBack,
@@ -25,16 +23,22 @@ export function NavigationBar({
   bookmarks,
   inputRef,
   webviewRef,
-  onUrlChange,
   onAddBookmark,
   onInputFocus,
   onInputBlur,
 }: NavigationBarProps) {
+  const [inputValue, setInputValue] = useState(displayUrl);
+
+  // Sync input value with displayUrl when it changes externally
+  useEffect(() => {
+    setInputValue(displayUrl);
+  }, [displayUrl]);
+
   const handleUrlSubmit = (e: React.FormEvent) => {
     e.preventDefault();
     const webview = webviewRef.current;
     if (webview) {
-      let urlToLoad = inputUrl;
+      let urlToLoad = inputValue;
       if (!urlToLoad.startsWith("http://") && !urlToLoad.startsWith("https://")) {
         urlToLoad = `https://${urlToLoad}`;
       }
@@ -109,8 +113,8 @@ export function NavigationBar({
             <input
               ref={inputRef}
               type="text"
-              value={inputUrl}
-              onChange={(e) => onUrlChange(e.target.value)}
+              value={inputValue}
+              onChange={(e) => setInputValue(e.target.value)}
               onFocus={onInputFocus}
               onBlur={onInputBlur}
               className="flex-1 bg-transparent outline-none text-sm"
