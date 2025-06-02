@@ -77,7 +77,7 @@ export function NetworkStats({ className = "" }: NetworkStatsProps) {
   };
 
   return (
-    <div className={`flex items-center space-x-3 text-xs ${className}`}>
+    <div className={`flex items-center space-x-4 text-xs ${className}`}>
       {/* Connection Status */}
       <div className="flex items-center space-x-1">
         {stats.isConnected ? (
@@ -93,22 +93,32 @@ export function NetworkStats({ className = "" }: NetworkStatsProps) {
         <span className="text-gray-300 min-w-[50px]">{formatDuration(stats.sessionDuration)}</span>
       </div>
 
-      {/* Download Speed */}
-      <div className="flex items-center space-x-1">
-        <FiDownload className="w-3 h-3 text-blue-400" />
-        <span className="text-gray-300 min-w-[60px] text-right">{formatSpeed(stats.downloadSpeed)}</span>
+      {/* Upload/Download Speed - Stacked Vertically */}
+      <div className="flex flex-col items-start space-y-0">
+        <div className="flex items-center space-x-1">
+          <FiDownload className="w-3 h-3 text-blue-400" />
+          <span className="text-gray-300 min-w-[60px] text-right">{formatSpeed(stats.downloadSpeed)}</span>
+        </div>
+        <div className="flex items-center space-x-1">
+          <FiUpload className="w-3 h-3 text-green-400" />
+          <span className="text-gray-300 min-w-[60px] text-right">{formatSpeed(stats.uploadSpeed)}</span>
+        </div>
       </div>
 
-      {/* Upload Speed */}
-      <div className="flex items-center space-x-1">
-        <FiUpload className="w-3 h-3 text-green-400" />
-        <span className="text-gray-300 min-w-[60px] text-right">{formatSpeed(stats.uploadSpeed)}</span>
-      </div>
-
-      {/* Session Totals (hidden on smaller screens) */}
-      <div className="hidden md:flex items-center space-x-2 text-gray-400 border-l border-gray-700 pl-3">
-        <span title="Total downloaded this session">↓ {formatBytes(stats.totalDownload)}</span>
-        <span title="Total uploaded this session">↑ {formatBytes(stats.totalUpload)}</span>
+      {/* Session Totals - Stacked Vertically (hidden on smaller screens) */}
+      <div className="hidden md:flex flex-col items-start space-y-0 text-gray-400 border-l border-gray-700 pl-3">
+        <span
+          className="text-xs"
+          title="Total downloaded this session"
+        >
+          ↓ {formatBytes(stats.totalDownload)}
+        </span>
+        <span
+          className="text-xs"
+          title="Total uploaded this session"
+        >
+          ↑ {formatBytes(stats.totalUpload)}
+        </span>
       </div>
     </div>
   );

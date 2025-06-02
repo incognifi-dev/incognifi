@@ -1,13 +1,26 @@
 import React, { useState, useEffect } from "react";
 import { motion, AnimatePresence } from "framer-motion";
-import { FiMessageSquare, FiUser, FiChevronUp } from "react-icons/fi";
+import { FiMessageSquare, FiUser, FiChevronUp, FiMapPin } from "react-icons/fi";
 import { UsernameSetupModal } from "./UsernameSetupModal";
 import { FriendsList } from "./FriendsList";
 import { ChatWindow } from "./ChatWindow";
 import { StatusSelector } from "./StatusSelector";
 import { NetworkStats } from "./NetworkStats";
+import { useVPNStore } from "../stores/vpnStore";
 import { dummyFriends } from "../data/dummyFriends";
 import type { UserData, Chat, UserStatus } from "../types/social";
+
+// Utility function to convert country code to flag emoji
+const getCountryFlag = (countryCode?: string): string => {
+  if (!countryCode || countryCode.length !== 2) return "🌐";
+
+  const codePoints = countryCode
+    .toUpperCase()
+    .split("")
+    .map((char) => 127397 + char.charCodeAt(0));
+
+  return String.fromCodePoint(...codePoints);
+};
 
 export function SocialBar() {
   const [isSetupModalOpen, setIsSetupModalOpen] = useState(false);
@@ -22,6 +35,9 @@ export function SocialBar() {
       setUserData(JSON.parse(savedUserData));
     }
   }, []);
+
+  // Get VPN state for server information
+  const { vpnState } = useVPNStore();
 
   const handleChatClick = () => {
     if (!userData) {
@@ -114,6 +130,23 @@ export function SocialBar() {
       <div className="fixed bottom-0 left-0 right-0 h-12 bg-gray-900 border-t border-gray-800 flex items-center px-4 z-50">
         {/* Network Stats - Left Side */}
         <NetworkStats className="mr-4" />
+
+        {/* Server Info - Left-Center */}
+        {vpnState.isConnected && (
+          <div className="flex items-center space-x-2 mr-4 border-l border-gray-700 pl-4">
+            <FiMapPin className="w-3 h-3 text-violet-400" />
+            <div className="flex items-center space-x-1">
+              <span className="text-sm">{getCountryFlag(vpnState.currentServer.countryCode)}</span>
+              <span className="text-gray-300 text-xs">
+                {vpnState.currentServer.country !== "N/A" ? vpnState.currentServer.country : vpnState.currentServer.ip}
+              </span>
+              <span className="text-gray-500 text-xs">•</span>
+              <span className="text-gray-400 text-xs font-mono">
+                {vpnState.currentServer.ip}:{vpnState.currentServer.port}
+              </span>
+            </div>
+          </div>
+        )}
 
         {/* Spacer to push chat to the right */}
         <div className="flex-1" />

@@ -16,6 +16,7 @@ import {
 import { ServerList } from "./ServerList";
 import { NetworkStats } from "./NetworkStats";
 import { useServerStore } from "../stores/serverStore";
+import { useVPNStore } from "../stores/vpnStore";
 
 // Since contextIsolation is false, we can access electron directly
 const { ipcRenderer } = window.require("electron");
@@ -68,7 +69,9 @@ const DUMMY_VPN_STATE: VPNState = {
 };
 
 export function VPNDropdown({ isOpen, onClose }: VPNDropdownProps) {
-  const [vpnState, setVpnState] = React.useState<VPNState>(DUMMY_VPN_STATE);
+  // Use VPN store instead of local state
+  const { vpnState, setVpnState, setCurrentServer, setConnectionStatus } = useVPNStore();
+
   const [isLoading, setIsLoading] = React.useState(false);
   const [showServerList, setShowServerList] = React.useState(false);
   const [showProxyConfig, setShowProxyConfig] = React.useState(false);
@@ -203,12 +206,12 @@ export function VPNDropdown({ isOpen, onClose }: VPNDropdownProps) {
         }
 
         // Immediate disconnect
-        setVpnState((prev) => ({ ...prev, isConnected: false }));
+        setConnectionStatus(false);
       } catch (error) {
         console.error("Failed to disable proxy:", error);
         setProxyMessage({ type: "error", text: "Failed to disable proxy" });
         // Still disconnect VPN even if proxy disable fails
-        setVpnState((prev) => ({ ...prev, isConnected: false }));
+        setConnectionStatus(false);
       } finally {
         setIsLoading(false);
       }
@@ -237,13 +240,13 @@ export function VPNDropdown({ isOpen, onClose }: VPNDropdownProps) {
         await new Promise((resolve) => setTimeout(resolve, 1500));
 
         // Connect VPN
-        setVpnState((prev) => ({ ...prev, isConnected: true }));
+        setConnectionStatus(true);
       } catch (error) {
         console.error("Failed to enable proxy:", error);
         setProxyMessage({ type: "error", text: "Failed to enable proxy" });
         // Still connect VPN even if proxy enable fails
         await new Promise((resolve) => setTimeout(resolve, 1500));
-        setVpnState((prev) => ({ ...prev, isConnected: true }));
+        setConnectionStatus(true);
       } finally {
         setIsLoading(false);
       }
@@ -256,12 +259,9 @@ export function VPNDropdown({ isOpen, onClose }: VPNDropdownProps) {
       setIsLoading(true);
 
       try {
-        // Update VPN state
-        setVpnState((prev) => ({
-          ...prev,
-          currentServer: server,
-          isConnected: true,
-        }));
+        // Update VPN state with new server
+        setCurrentServer(server);
+        setConnectionStatus(true);
 
         // Update proxy configuration with selected server and enable it
         const updatedProxyConfig = {

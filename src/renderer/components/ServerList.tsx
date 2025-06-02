@@ -37,7 +37,7 @@ const fetchProxyList = async (): Promise<Server[]> => {
 
   try {
     const response = await fetch(
-      "https://raw.githubusercontent.com/monosans/proxy-list/refs/heads/main/proxies_anonymous/http.txt"
+      "https://raw.githubusercontent.com/monosans/proxy-list/refs/heads/main/proxies/http.txt"
     );
     const text = await response.text();
 
