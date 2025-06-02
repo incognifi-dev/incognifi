@@ -1,14 +1,14 @@
-import React, { useState, useEffect } from "react";
-import { motion, AnimatePresence } from "framer-motion";
-import { FiMessageSquare, FiUser, FiChevronUp, FiMapPin } from "react-icons/fi";
-import { UsernameSetupModal } from "./UsernameSetupModal";
-import { FriendsList } from "./FriendsList";
-import { ChatWindow } from "./ChatWindow";
-import { StatusSelector } from "./StatusSelector";
-import { NetworkStats } from "./NetworkStats";
-import { useVPNStore } from "../stores/vpnStore";
+import { AnimatePresence, motion } from "framer-motion";
+import { useEffect, useState } from "react";
+import { FiChevronUp, FiMapPin, FiMessageSquare } from "react-icons/fi";
 import { dummyFriends } from "../data/dummyFriends";
-import type { UserData, Chat, UserStatus } from "../types/social";
+import { useVPNStore } from "../stores/vpnStore";
+import type { Chat, UserData, UserStatus } from "../types/social";
+import { ChatWindow } from "./ChatWindow";
+import { FriendsList } from "./FriendsList";
+import { NetworkStats } from "./NetworkStats";
+import { StatusSelector } from "./StatusSelector";
+import { UsernameSetupModal } from "./UsernameSetupModal";
 
 // Utility function to convert country code to flag emoji
 const getCountryFlag = (countryCode?: string): string => {

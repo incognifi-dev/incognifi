@@ -1,22 +1,9 @@
+import { AnimatePresence, motion } from "framer-motion";
 import React from "react";
-import { motion, AnimatePresence } from "framer-motion";
-import {
-  FiActivity,
-  FiRefreshCw,
-  FiX,
-  FiMapPin,
-  FiSettings,
-  FiWifi,
-  FiWifiOff,
-  FiChevronRight,
-  FiEye,
-  FiEyeOff,
-  FiCheck,
-} from "react-icons/fi";
-import { ServerList } from "./ServerList";
-import { NetworkStats } from "./NetworkStats";
+import { FiActivity, FiCheck, FiEye, FiEyeOff, FiRefreshCw, FiSettings, FiWifi, FiWifiOff, FiX } from "react-icons/fi";
 import { useServerStore } from "../stores/serverStore";
 import { useVPNStore } from "../stores/vpnStore";
+import { ServerList } from "./ServerList";
 
 // Since contextIsolation is false, we can access electron directly
 const { ipcRenderer } = window.require("electron");
@@ -45,32 +32,9 @@ interface ProxyConfigType {
   password?: string;
 }
 
-// Updated initial server to match new format
-const INITIAL_SERVER: Server = {
-  id: "custom_1",
-  country: "N/A",
-  city: "N/A",
-  ip: "127.0.0.1",
-  port: 8080,
-  ping: null,
-  load: null,
-};
-
-interface VPNState {
-  isConnected: boolean;
-  signalStrength: number;
-  currentServer: Server;
-}
-
-const DUMMY_VPN_STATE: VPNState = {
-  isConnected: false,
-  signalStrength: 85,
-  currentServer: INITIAL_SERVER,
-};
-
 export function VPNDropdown({ isOpen, onClose }: VPNDropdownProps) {
   // Use VPN store instead of local state
-  const { vpnState, setVpnState, setCurrentServer, setConnectionStatus } = useVPNStore();
+  const { vpnState, setCurrentServer, setConnectionStatus } = useVPNStore();
 
   const [isLoading, setIsLoading] = React.useState(false);
   const [showServerList, setShowServerList] = React.useState(false);

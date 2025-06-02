@@ -1,6 +1,6 @@
-import React, { useState, useEffect } from "react";
-import { motion, AnimatePresence } from "framer-motion";
-import { FiSettings, FiWifi, FiWifiOff, FiCheck, FiX, FiRefreshCw, FiEye, FiEyeOff } from "react-icons/fi";
+import { AnimatePresence, motion } from "framer-motion";
+import { useEffect, useState } from "react";
+import { FiCheck, FiEye, FiEyeOff, FiRefreshCw, FiSettings, FiWifi, FiWifiOff, FiX } from "react-icons/fi";
 import { ProxyConfig as ProxyConfigType } from "../types";
 
 // Since contextIsolation is false, we can access electron directly

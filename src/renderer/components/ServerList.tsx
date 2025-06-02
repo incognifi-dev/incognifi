@@ -1,6 +1,6 @@
-import React, { useState, useMemo, useEffect } from "react";
-import { motion, AnimatePresence } from "framer-motion";
-import { FiSearch, FiChevronUp, FiChevronDown, FiRefreshCw } from "react-icons/fi";
+import { AnimatePresence, motion } from "framer-motion";
+import { useEffect, useMemo, useState } from "react";
+import { FiChevronDown, FiChevronUp, FiRefreshCw, FiSearch } from "react-icons/fi";
 import { useServerStore } from "../stores/serverStore";
 
 interface Server {

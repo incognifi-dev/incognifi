@@ -1,5 +1,5 @@
-import React, { useState, useEffect } from "react";
-import { FiDownload, FiUpload, FiWifi, FiWifiOff, FiClock } from "react-icons/fi";
+import { useEffect, useState } from "react";
+import { FiClock, FiDownload, FiUpload, FiWifi, FiWifiOff } from "react-icons/fi";
 
 // Since contextIsolation is false, we can access electron directly
 const { ipcRenderer } = window.require("electron");
