@@ -54,7 +54,7 @@ export function VPNDropdown({ isOpen, onClose }: VPNDropdownProps) {
   const [hasAutoOpened, setHasAutoOpened] = React.useState(false);
 
   // Get clearServers function from store
-  const { clearServers } = useServerStore();
+  const { clearServers, servers } = useServerStore();
 
   // Proxy configuration state
   const [proxyConfig, setProxyConfig] = React.useState<ProxyConfigType>({
@@ -67,6 +67,7 @@ export function VPNDropdown({ isOpen, onClose }: VPNDropdownProps) {
   const [proxyMessage, setProxyMessage] = React.useState<{ type: "success" | "error"; text: string } | null>(null);
   const [showPassword, setShowPassword] = React.useState(false);
   const [isTesting, setIsTesting] = React.useState(false);
+  const [isQuickSwitching, setIsQuickSwitching] = React.useState(false);
 
   // Load proxy configuration when dropdown opens
   React.useEffect(() => {
@@ -281,6 +282,63 @@ export function VPNDropdown({ isOpen, onClose }: VPNDropdownProps) {
     if (showServerList) return 800;
     if (showProxyConfig) return 700;
     return 600;
+  };
+
+  const handleQuickSwitch = async () => {
+    if (!vpnState.isConnected || servers.length === 0) {
+      setProxyMessage({ type: "error", text: "No servers available for quick switch" });
+      setTimeout(() => setProxyMessage(null), 3000);
+      return;
+    }
+
+    setIsQuickSwitching(true);
+
+    try {
+      // Get healthy servers (those with ping values) and sort by ping
+      const healthyServers = servers
+        .filter((server) => server.ping !== null && server.id !== vpnState.currentServer.id)
+        .sort((a, b) => (a.ping || 0) - (b.ping || 0));
+
+      if (healthyServers.length === 0) {
+        setProxyMessage({ type: "error", text: "No alternative servers available" });
+        setTimeout(() => setProxyMessage(null), 3000);
+        return;
+      }
+
+      // Find the best server (lowest ping)
+      const bestServer = healthyServers[0];
+      const currentPing = vpnState.currentServer.ping || Infinity;
+
+      // Check if the best available server has better ping than current
+      if (bestServer.ping && bestServer.ping < currentPing) {
+        // Switch to the better server
+        await handleServerSelect(bestServer);
+        setProxyMessage({
+          type: "success",
+          text: `Switched to faster server: ${bestServer.country} (${bestServer.ping}ms)`,
+        });
+      } else {
+        // Current server is already the best, try the next best option
+        const nextBestServer = healthyServers.find((server) => server.ping && server.ping !== bestServer.ping);
+        if (nextBestServer) {
+          await handleServerSelect(nextBestServer);
+          setProxyMessage({
+            type: "success",
+            text: `Switched to alternative server: ${nextBestServer.country} (${nextBestServer.ping}ms)`,
+          });
+        } else {
+          setProxyMessage({ type: "error", text: "Already using the optimal server" });
+        }
+      }
+
+      setTimeout(() => setProxyMessage(null), 3000);
+    } catch (error) {
+      console.error("Failed to quick switch:", error);
+      setProxyMessage({ type: "error", text: "Failed to switch servers" });
+      setTimeout(() => setProxyMessage(null), 3000);
+    } finally {
+      setIsQuickSwitching(false);
+    }
   };
 
   return (
@@ -666,6 +724,22 @@ export function VPNDropdown({ isOpen, onClose }: VPNDropdownProps) {
                       >
                         <FiRefreshCw className="w-4 h-4 mr-2" />
                         Switch Server
+                      </button>
+                    )}
+
+                    {/* Quick Switch Button */}
+                    {vpnState.isConnected && servers.length > 0 && (
+                      <button
+                        onClick={handleQuickSwitch}
+                        disabled={isQuickSwitching}
+                        className="w-full py-2 px-4 rounded-lg font-medium border border-green-200 text-green-600 hover:bg-green-50 transition-colors flex items-center justify-center disabled:opacity-50"
+                      >
+                        {isQuickSwitching ? (
+                          <FiRefreshCw className="w-4 h-4 mr-2 animate-spin" />
+                        ) : (
+                          <FiActivity className="w-4 h-4 mr-2" />
+                        )}
+                        {isQuickSwitching ? "Switching..." : "Quick Switch (Best Latency)"}
                       </button>
                     )}
 
