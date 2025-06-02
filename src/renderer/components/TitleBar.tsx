@@ -1,8 +1,9 @@
 import React, { useState } from "react";
 import { Tab } from "../types";
-import { XMarkIcon, PlusIcon } from "@heroicons/react/24/outline";
+import { XMarkIcon, PlusIcon, CogIcon } from "@heroicons/react/24/outline";
 import logoWhite from "../assets/icognifi-white.png";
 import { VPNDropdown } from "./VPNDropdown";
+import { SettingsDropdown } from "./SettingsDropdown";
 
 interface TitleBarProps {
   tabs: Tab[];
@@ -14,6 +15,7 @@ interface TitleBarProps {
 
 export const TitleBar: React.FC<TitleBarProps> = ({ tabs, activeTabId, onTabClick, onTabClose, onNewTab }) => {
   const [isVPNDropdownOpen, setIsVPNDropdownOpen] = useState(false);
+  const [isSettingsDropdownOpen, setIsSettingsDropdownOpen] = useState(false);
 
   // Detect if we're on macOS to show traffic lights spacer
   const isMac = typeof process !== "undefined" && process.platform === "darwin";
@@ -91,13 +93,31 @@ export const TitleBar: React.FC<TitleBarProps> = ({ tabs, activeTabId, onTabClic
         ))}
       </div>
 
-      {/* New Tab Button */}
-      <button
-        className="flex items-center justify-center w-8 h-8 ml-1 rounded-md text-white hover:bg-white/10 transition-colors non-draggable"
-        onClick={onNewTab}
-      >
-        <PlusIcon className="w-5 h-5" />
-      </button>
+      {/* Controls */}
+      <div className="flex items-center space-x-1 non-draggable">
+        {/* New Tab Button */}
+        <button
+          className="flex items-center justify-center w-8 h-8 rounded-md text-white hover:bg-white/10 transition-colors"
+          onClick={onNewTab}
+        >
+          <PlusIcon className="w-5 h-5" />
+        </button>
+
+        {/* Settings Button */}
+        <div className="relative">
+          <button
+            className="flex items-center justify-center w-8 h-8 rounded-md text-white hover:bg-white/10 transition-colors"
+            onClick={() => setIsSettingsDropdownOpen(!isSettingsDropdownOpen)}
+          >
+            <CogIcon className="w-5 h-5" />
+          </button>
+
+          <SettingsDropdown
+            isOpen={isSettingsDropdownOpen}
+            onClose={() => setIsSettingsDropdownOpen(false)}
+          />
+        </div>
+      </div>
     </div>
   );
 };

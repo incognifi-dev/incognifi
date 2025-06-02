@@ -1,4 +1,4 @@
-import { app, BrowserWindow, Menu, dialog } from "electron";
+import { app, BrowserWindow, Menu, dialog, ipcMain } from "electron";
 import path from "path";
 
 // Set the app name
@@ -21,6 +21,26 @@ function createWindow() {
     },
   });
 
+  // Set up IPC handlers for settings
+  ipcMain.handle("clear-storage", async () => {
+    const { response } = await dialog.showMessageBox(mainWindow, {
+      type: "warning",
+      buttons: ["Cancel", "Clear Storage"],
+      defaultId: 0,
+      title: "Clear Storage",
+      message: "Are you sure you want to clear all storage?",
+      detail: "This will remove all bookmarks and reset the browser to its default state.",
+    });
+
+    if (response === 1) {
+      // User clicked "Clear Storage"
+      mainWindow.webContents.session.clearStorageData();
+      mainWindow.webContents.reload();
+      return { success: true };
+    }
+    return { success: false };
+  });
+
   // Create the application menu
   const isMac = process.platform === "darwin";
 
@@ -31,26 +51,6 @@ function createWindow() {
             label: app.name,
             submenu: [
               { role: "about" },
-              { type: "separator" },
-              {
-                label: "Clear Storage and Reset",
-                click: async () => {
-                  const { response } = await dialog.showMessageBox(mainWindow, {
-                    type: "warning",
-                    buttons: ["Cancel", "Clear Storage"],
-                    defaultId: 0,
-                    title: "Clear Storage",
-                    message: "Are you sure you want to clear all storage?",
-                    detail: "This will remove all bookmarks and reset the browser to its default state.",
-                  });
-
-                  if (response === 1) {
-                    // User clicked "Clear Storage"
-                    mainWindow.webContents.session.clearStorageData();
-                    mainWindow.webContents.reload();
-                  }
-                },
-              },
               { type: "separator" },
               { role: "services" },
               { type: "separator" },
@@ -65,28 +65,7 @@ function createWindow() {
       : []),
     {
       label: "File",
-      submenu: [
-        isMac ? { role: "close" } : { role: "quit" },
-        {
-          label: "Clear Storage and Reset",
-          click: async () => {
-            const { response } = await dialog.showMessageBox(mainWindow, {
-              type: "warning",
-              buttons: ["Cancel", "Clear Storage"],
-              defaultId: 0,
-              title: "Clear Storage",
-              message: "Are you sure you want to clear all storage?",
-              detail: "This will remove all bookmarks and reset the browser to its default state.",
-            });
-
-            if (response === 1) {
-              // User clicked "Clear Storage"
-              mainWindow.webContents.session.clearStorageData();
-              mainWindow.webContents.reload();
-            }
-          },
-        },
-      ],
+      submenu: [isMac ? { role: "close" } : { role: "quit" }],
     },
     {
       label: "View",
@@ -140,4 +119,9 @@ app.on("window-all-closed", () => {
   if (process.platform !== "darwin") {
     app.quit();
   }
+});
+
+// Clean up IPC handlers when app is quitting
+app.on("before-quit", () => {
+  ipcMain.removeAllListeners("clear-storage");
 });
