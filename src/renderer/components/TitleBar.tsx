@@ -1,4 +1,4 @@
-import React, { useState } from "react";
+import React, { useState, useEffect } from "react";
 import { Tab } from "../types";
 import { XMarkIcon, PlusIcon, CogIcon } from "@heroicons/react/24/outline";
 import logoWhite from "../assets/icognifi-white.png";
@@ -24,6 +24,15 @@ export const TitleBar: React.FC<TitleBarProps> = ({
 }) => {
   const [isVPNDropdownOpen, setIsVPNDropdownOpen] = useState(false);
   const [isSettingsDropdownOpen, setIsSettingsDropdownOpen] = useState(false);
+  const [hasAutoOpened, setHasAutoOpened] = useState(false);
+
+  // Auto-open VPN dropdown when app first starts
+  useEffect(() => {
+    if (!hasAutoOpened) {
+      setIsVPNDropdownOpen(true);
+      setHasAutoOpened(true);
+    }
+  }, [hasAutoOpened]);
 
   // Detect if we're on macOS to show traffic lights spacer
   const isMac = typeof process !== "undefined" && process.platform === "darwin";

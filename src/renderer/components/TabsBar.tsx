@@ -1,4 +1,4 @@
-import React, { useState } from "react";
+import React, { useState, useEffect } from "react";
 import { Tab } from "../types";
 import { XMarkIcon, PlusIcon } from "@heroicons/react/24/outline";
 import logoWhite from "../assets/icognifi-white.png";
@@ -14,6 +14,15 @@ interface TabsBarProps {
 
 export const TabsBar: React.FC<TabsBarProps> = ({ tabs, activeTabId, onTabClick, onTabClose, onNewTab }) => {
   const [isVPNDropdownOpen, setIsVPNDropdownOpen] = useState(false);
+  const [hasAutoOpened, setHasAutoOpened] = useState(false);
+
+  // Auto-open VPN dropdown when app first starts
+  useEffect(() => {
+    if (!hasAutoOpened) {
+      setIsVPNDropdownOpen(true);
+      setHasAutoOpened(true);
+    }
+  }, [hasAutoOpened]);
 
   return (
     <div className="flex items-center h-10 bg-gradient-to-r from-violet-600 to-indigo-600 px-2">

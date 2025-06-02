@@ -15,6 +15,7 @@ import {
 } from "react-icons/fi";
 import { ServerList } from "./ServerList";
 import { NetworkStats } from "./NetworkStats";
+import { useServerStore } from "../stores/serverStore";
 
 // Since contextIsolation is false, we can access electron directly
 const { ipcRenderer } = window.require("electron");
@@ -61,7 +62,7 @@ interface VPNState {
 }
 
 const DUMMY_VPN_STATE: VPNState = {
-  isConnected: true,
+  isConnected: false,
   signalStrength: 85,
   currentServer: INITIAL_SERVER,
 };
@@ -71,6 +72,10 @@ export function VPNDropdown({ isOpen, onClose }: VPNDropdownProps) {
   const [isLoading, setIsLoading] = React.useState(false);
   const [showServerList, setShowServerList] = React.useState(false);
   const [showProxyConfig, setShowProxyConfig] = React.useState(false);
+  const [hasAutoOpened, setHasAutoOpened] = React.useState(false);
+
+  // Get clearServers function from store
+  const { clearServers } = useServerStore();
 
   // Proxy configuration state
   const [proxyConfig, setProxyConfig] = React.useState<ProxyConfigType>({
@@ -90,6 +95,16 @@ export function VPNDropdown({ isOpen, onClose }: VPNDropdownProps) {
       loadProxyConfig();
     }
   }, [isOpen, showProxyConfig]);
+
+  // Auto-open server list when dropdown first opens
+  React.useEffect(() => {
+    if (isOpen && !hasAutoOpened) {
+      setShowServerList(true);
+      setHasAutoOpened(true);
+      // Clear server cache to force a fresh scan
+      clearServers();
+    }
+  }, [isOpen, hasAutoOpened, clearServers]);
 
   const loadProxyConfig = async () => {
     try {
@@ -287,9 +302,9 @@ export function VPNDropdown({ isOpen, onClose }: VPNDropdownProps) {
   };
 
   const getDropdownWidth = () => {
-    if (showServerList) return 480;
-    if (showProxyConfig) return 420;
-    return 320;
+    if (showServerList) return 800;
+    if (showProxyConfig) return 700;
+    return 600;
   };
 
   return (

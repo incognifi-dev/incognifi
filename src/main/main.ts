@@ -320,6 +320,64 @@ function createWindow() {
     }
   });
 
+  // Test a specific proxy server by trying to fetch a test website through it
+  ipcMain.handle("test-proxy-server", async (event, proxyServer: { ip: string; port: number; type?: string }) => {
+    try {
+      const testSession = session.fromPartition(`test-proxy-${proxyServer.ip}-${proxyServer.port}`);
+      const proxyType = proxyServer.type || "http";
+      const proxyRules = `${proxyType}://${proxyServer.ip}:${proxyServer.port}`;
+
+      // Configure the session with the specific proxy
+      await testSession.setProxy({
+        proxyRules: proxyRules,
+        proxyBypassRules: "", // Don't bypass anything for testing
+      });
+
+      // Create a test window to fetch through the proxy
+      const testWindow = new BrowserWindow({
+        show: false,
+        webPreferences: {
+          session: testSession,
+          nodeIntegration: false,
+          contextIsolation: true,
+          webSecurity: true,
+        },
+      });
+
+      return new Promise((resolve) => {
+        const timeoutId = setTimeout(() => {
+          testWindow.destroy();
+          resolve({ success: false, ping: null, error: "Timeout" });
+        }, 5000); // Reduced timeout to 5 seconds since httpbin.org is fast and reliable
+
+        const startTime = Date.now();
+
+        testWindow.webContents.once("did-finish-load", () => {
+          const endTime = Date.now();
+          const ping = endTime - startTime;
+          clearTimeout(timeoutId);
+          testWindow.destroy();
+          resolve({ success: true, ping, error: null });
+        });
+
+        testWindow.webContents.once("did-fail-load", (event, errorCode, errorDescription) => {
+          clearTimeout(timeoutId);
+          testWindow.destroy();
+          resolve({ success: false, ping: null, error: `${errorCode}: ${errorDescription}` });
+        });
+
+        // Try to load a simple test page through the proxy
+        testWindow.loadURL("https://httpbin.org/ip").catch((error) => {
+          clearTimeout(timeoutId);
+          testWindow.destroy();
+          resolve({ success: false, ping: null, error: error.message });
+        });
+      });
+    } catch (error) {
+      return { success: false, ping: null, error: error instanceof Error ? error.message : String(error) };
+    }
+  });
+
   // Create the application menu
   const isMac = process.platform === "darwin";
 
@@ -419,4 +477,5 @@ app.on("before-quit", () => {
   ipcMain.removeAllListeners("set-proxy-config");
   ipcMain.removeAllListeners("toggle-proxy");
   ipcMain.removeAllListeners("test-proxy-connection");
+  ipcMain.removeAllListeners("test-proxy-server");
 });
