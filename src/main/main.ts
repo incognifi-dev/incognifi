@@ -355,7 +355,7 @@ function createWindow() {
 
       // Configure axios with proxy settings
       const axiosConfig = {
-        timeout: 5000, // 5 second timeout
+        timeout: 15000, // 5 second timeout
         proxy: false, // Disable default proxy to use our custom proxy
         httpsAgent: false,
         httpAgent: false,

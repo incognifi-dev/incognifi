@@ -1,7 +1,10 @@
 import { AnimatePresence, motion } from "framer-motion";
-import { useEffect, useMemo, useState } from "react";
+import React, { useEffect, useMemo, useState } from "react";
 import { FiChevronDown, FiChevronUp, FiRefreshCw, FiSearch, FiCheck, FiX, FiMapPin, FiActivity } from "react-icons/fi";
 import { useServerStore } from "../stores/serverStore";
+
+// Import common flag components
+import * as FlagIcons from "country-flag-icons/react/3x2";
 
 interface Server {
   id: string;
@@ -21,16 +24,26 @@ interface ServerListProps {
   currentServer?: Server;
 }
 
-// Utility function to convert country code to flag emoji
-const getCountryFlag = (countryCode?: string): string => {
-  if (!countryCode || countryCode.length !== 2) return "🌐";
+// Helper component to render country flags using country-flag-icons
+const CountryFlag = ({ countryCode, country }: { countryCode?: string; country: string }) => {
+  if (!countryCode || countryCode.length !== 2) {
+    return <span className="text-lg">🌐</span>;
+  }
 
-  const codePoints = countryCode
-    .toUpperCase()
-    .split("")
-    .map((char) => 127397 + char.charCodeAt(0));
+  const flagCode = countryCode.toUpperCase();
+  const FlagComponent = (FlagIcons as any)[flagCode];
 
-  return String.fromCodePoint(...codePoints);
+  if (FlagComponent) {
+    return (
+      <FlagComponent
+        className="w-6 h-4 inline-block object-cover rounded-sm border border-gray-200"
+        title={country}
+      />
+    );
+  }
+
+  // Fallback to globe icon if flag is not found
+  return <span className="text-lg">🌐</span>;
 };
 
 // Function to fetch healthy proxy list from the external API
@@ -482,7 +495,10 @@ export function ServerList({ onSelect, currentServer }: ServerListProps) {
                   >
                     <div className="col-span-3">
                       <div className="font-medium text-gray-900 flex items-center gap-2">
-                        <span className="text-lg">{getCountryFlag(server.countryCode)}</span>
+                        <CountryFlag
+                          countryCode={server.countryCode}
+                          country={server.country}
+                        />
                         <span>{server.country}</span>
                       </div>
                       <div className="text-sm text-gray-500">{server.city}</div>

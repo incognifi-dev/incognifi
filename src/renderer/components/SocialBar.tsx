@@ -10,16 +10,29 @@ import { NetworkStats } from "./NetworkStats";
 import { StatusSelector } from "./StatusSelector";
 import { UsernameSetupModal } from "./UsernameSetupModal";
 
-// Utility function to convert country code to flag emoji
-const getCountryFlag = (countryCode?: string): string => {
-  if (!countryCode || countryCode.length !== 2) return "🌐";
+// Import flag components
+import * as FlagIcons from "country-flag-icons/react/3x2";
 
-  const codePoints = countryCode
-    .toUpperCase()
-    .split("")
-    .map((char) => 127397 + char.charCodeAt(0));
+// Helper component to render country flags using country-flag-icons
+const CountryFlag = ({ countryCode, country }: { countryCode?: string; country: string }) => {
+  if (!countryCode || countryCode.length !== 2) {
+    return <span className="text-sm">🌐</span>;
+  }
 
-  return String.fromCodePoint(...codePoints);
+  const flagCode = countryCode.toUpperCase();
+  const FlagComponent = (FlagIcons as any)[flagCode];
+
+  if (FlagComponent) {
+    return (
+      <FlagComponent
+        className="w-4 h-3 inline-block object-cover rounded-sm border border-gray-200"
+        title={country}
+      />
+    );
+  }
+
+  // Fallback to globe icon if flag is not found
+  return <span className="text-sm">🌐</span>;
 };
 
 export function SocialBar() {
@@ -136,7 +149,10 @@ export function SocialBar() {
           <div className="flex items-center space-x-2 mr-4 border-l border-gray-700 pl-4">
             <FiMapPin className="w-3 h-3 text-violet-400" />
             <div className="flex items-center space-x-1">
-              <span className="text-sm">{getCountryFlag(vpnState.currentServer.countryCode)}</span>
+              <CountryFlag
+                countryCode={vpnState.currentServer.countryCode}
+                country={vpnState.currentServer.country}
+              />
               <span className="text-gray-300 text-xs">
                 {vpnState.currentServer.country !== "N/A" ? vpnState.currentServer.country : vpnState.currentServer.ip}
               </span>
