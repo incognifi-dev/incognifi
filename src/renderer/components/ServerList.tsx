@@ -239,7 +239,7 @@ export function ServerList({ onSelect, currentServer }: ServerListProps) {
   const checkServerPings = async (servers: Server[]) => {
     console.log("🔍 [checkServerPings] Starting proxy health checks:", {
       totalServers: servers.length,
-      batchSize: 25, // Increased batch size since httpbin has no rate limits
+      batchSize: 3, // Increased batch size since httpbin has no rate limits
     });
 
     // Since contextIsolation is false, we can access electron directly
@@ -250,7 +250,7 @@ export function ServerList({ onSelect, currentServer }: ServerListProps) {
       setPingProgress(0, servers.length);
 
       // Process servers in larger batches since httpbin.org has no rate limits
-      const batchSize = 25;
+      const batchSize = 10;
       const batches = [];
       for (let i = 0; i < servers.length; i += batchSize) {
         batches.push(servers.slice(i, i + batchSize));

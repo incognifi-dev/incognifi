@@ -12,6 +12,9 @@
     "build:app": "npm run build && electron-builder",
     "build:mac": "npm run build && electron-builder --mac",
     "build:win": "npm run build && electron-builder --win",
+    "build:win:debug": "npm run build && node debug-windows.js && electron-builder --win",
+    "debug:build": "node debug-windows.js",
+    "test:electron": "npm run build && electron .",
     "lint": "eslint src --ext ts,tsx --report-unused-disable-directives --max-warnings 0",
     "preview": "vite preview"
   },

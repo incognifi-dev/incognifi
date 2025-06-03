@@ -233,15 +233,41 @@ function createWindow() {
     height: 800,
     title: "IcogniFi",
     icon: path.join(__dirname, "../renderer/assets/icognifi-alpha.png"),
-    titleBarStyle: "hiddenInset",
+    titleBarStyle: process.platform === "darwin" ? "hiddenInset" : "default",
     trafficLightPosition: { x: 20, y: 20 },
+    show: false,
     webPreferences: {
       nodeIntegration: true,
       contextIsolation: false,
       webviewTag: true,
-      webSecurity: true,
+      webSecurity: false,
       sandbox: false,
+      allowRunningInsecureContent: true,
+      experimentalFeatures: true,
     },
+  });
+
+  // Show window when ready to prevent white screen
+  mainWindow.once("ready-to-show", () => {
+    mainWindow.show();
+    console.log("Window is ready to show");
+  });
+
+  // Add error handling for renderer process
+  mainWindow.webContents.on("crashed", (event) => {
+    console.error("Renderer process crashed:", event);
+  });
+
+  mainWindow.webContents.on("unresponsive", () => {
+    console.error("Renderer process became unresponsive");
+  });
+
+  mainWindow.webContents.on("did-fail-load", (event, errorCode, errorDescription, validatedURL) => {
+    console.error("Failed to load main window:", {
+      errorCode,
+      errorDescription,
+      validatedURL,
+    });
   });
 
   // Set up IPC handlers for settings
@@ -445,12 +471,77 @@ function createWindow() {
   const menu = Menu.buildFromTemplate(template as any);
   Menu.setApplicationMenu(menu);
 
-  // In development, load from the Vite dev server
-  if (process.env.NODE_ENV !== "production") {
-    mainWindow.loadURL("http://localhost:5173");
+  // Load the appropriate content based on environment
+  const isDevelopment = process.env.NODE_ENV === "development" || process.env.ELECTRON_IS_DEV === "true";
+  const isPackaged = app.isPackaged;
+  const devServerUrl = "http://localhost:5173";
+
+  console.log("Environment check:", {
+    NODE_ENV: process.env.NODE_ENV,
+    ELECTRON_IS_DEV: process.env.ELECTRON_IS_DEV,
+    isPackaged,
+    isDevelopment,
+  });
+
+  // Check if dev server is available
+  if (isDevelopment && !isPackaged) {
+    console.log("Development mode detected, attempting to load dev server...");
+    try {
+      // Try to load dev server
+      mainWindow.loadURL(devServerUrl);
+    } catch (error) {
+      console.log("Dev server not available, falling back to production files");
+      loadProductionFiles();
+    }
   } else {
-    // In production, load the built files
-    mainWindow.loadFile(path.resolve(__dirname, "..", "renderer", "index.html"));
+    console.log("Production mode detected, loading built files...");
+    loadProductionFiles();
+  }
+
+  function loadProductionFiles() {
+    const htmlPath = path.join(__dirname, "..", "renderer", "index.html");
+    console.log("Loading production file from:", htmlPath);
+    console.log("File exists:", fs.existsSync(htmlPath));
+    console.log("Current working directory:", process.cwd());
+    console.log("__dirname:", __dirname);
+
+    // Verify the file exists before trying to load it
+    if (fs.existsSync(htmlPath)) {
+      mainWindow.loadFile(htmlPath);
+    } else {
+      // Fallback path resolution for different environments
+      const fallbackPath = path.resolve(process.cwd(), "dist", "renderer", "index.html");
+      console.log("Trying fallback path:", fallbackPath);
+      console.log("Fallback file exists:", fs.existsSync(fallbackPath));
+
+      if (fs.existsSync(fallbackPath)) {
+        mainWindow.loadFile(fallbackPath);
+      } else {
+        console.error("Could not find index.html file in either location");
+        // Load a minimal error page
+        mainWindow.loadURL(`data:text/html,
+          <html>
+            <head><title>Error</title></head>
+            <body style="font-family: Arial, sans-serif; padding: 20px;">
+              <h1>File Not Found</h1>
+              <p>Could not load the application. Please reinstall.</p>
+              <p><strong>Searched paths:</strong></p>
+              <ul>
+                <li>${htmlPath}</li>
+                <li>${fallbackPath}</li>
+              </ul>
+              <p><strong>Environment Info:</strong></p>
+              <ul>
+                <li>NODE_ENV: ${process.env.NODE_ENV}</li>
+                <li>isPackaged: ${isPackaged}</li>
+                <li>__dirname: ${__dirname}</li>
+                <li>process.cwd(): ${process.cwd()}</li>
+              </ul>
+            </body>
+          </html>
+        `);
+      }
+    }
   }
 
   // Initialize proxy configuration if it was previously enabled
@@ -460,6 +551,9 @@ function createWindow() {
       console.log("Proxy initialization result:", result);
     });
   }
+
+  // DevTools can be opened manually via the menu if needed for debugging
+  // mainWindow.webContents.openDevTools();
 }
 
 app.whenReady().then(() => {
