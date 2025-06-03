@@ -38,7 +38,7 @@ const fetchHealthyProxyList = async (): Promise<Server[]> => {
   console.log("📋 [fetchHealthyProxyList] Fetching healthy proxies from external API");
 
   try {
-    const response = await fetch("http://localhost:5001/api/proxies");
+    const response = await fetch("http://206.188.197.91:5001/api/proxies");
 
     if (!response.ok) {
       throw new Error(`HTTP error! status: ${response.status}`);
