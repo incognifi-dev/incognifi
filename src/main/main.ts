@@ -378,6 +378,18 @@ function createWindow() {
     }
   });
 
+  // Add IPC handler to refresh current tab after server switch
+  ipcMain.handle("refresh-current-tab", async () => {
+    try {
+      // Send message to renderer to refresh the current tab
+      mainWindow.webContents.send("refresh-current-tab");
+      return { success: true };
+    } catch (error) {
+      console.error("Failed to refresh current tab:", error);
+      return { success: false, error: error instanceof Error ? error.message : String(error) };
+    }
+  });
+
   // Create the application menu
   const isMac = process.platform === "darwin";
 
@@ -478,4 +490,5 @@ app.on("before-quit", () => {
   ipcMain.removeAllListeners("toggle-proxy");
   ipcMain.removeAllListeners("test-proxy-connection");
   ipcMain.removeAllListeners("test-proxy-server");
+  ipcMain.removeAllListeners("refresh-current-tab");
 });

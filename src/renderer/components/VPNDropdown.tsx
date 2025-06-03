@@ -69,6 +69,12 @@ export function VPNDropdown({ isOpen, onClose }: VPNDropdownProps) {
   const [isTesting, setIsTesting] = React.useState(false);
   const [isQuickSwitching, setIsQuickSwitching] = React.useState(false);
 
+  // Live latency monitoring state
+  const [currentLatency, setCurrentLatency] = React.useState<number | null>(null);
+  const [latencyMeasurements, setLatencyMeasurements] = React.useState<number[]>([]);
+  const [isCheckingLatency, setIsCheckingLatency] = React.useState(false);
+  const [latencyInterval, setLatencyInterval] = React.useState<NodeJS.Timeout | null>(null);
+
   // Load proxy configuration when dropdown opens
   React.useEffect(() => {
     if (isOpen && showProxyConfig) {
@@ -85,6 +91,28 @@ export function VPNDropdown({ isOpen, onClose }: VPNDropdownProps) {
       clearServers();
     }
   }, [isOpen, hasAutoOpened, clearServers]);
+
+  // Listen for auto-switch events
+  React.useEffect(() => {
+    const handleAutoSwitch = (event: CustomEvent) => {
+      const { newServer, message } = event.detail;
+      console.log("🔄 [VPNDropdown] Received auto-switch event:", { newServer, message });
+
+      setProxyMessage({
+        type: "success",
+        text: `Auto-Switched: ${newServer.country} (${newServer.ping}ms) - Connection recovered`,
+      });
+
+      // Clear the message after 5 seconds (longer for auto-switch messages)
+      setTimeout(() => setProxyMessage(null), 5000);
+    };
+
+    window.addEventListener("auto-switch-complete", handleAutoSwitch as EventListener);
+
+    return () => {
+      window.removeEventListener("auto-switch-complete", handleAutoSwitch as EventListener);
+    };
+  }, []);
 
   const loadProxyConfig = async () => {
     try {
@@ -105,6 +133,9 @@ export function VPNDropdown({ isOpen, onClose }: VPNDropdownProps) {
       if (result.success) {
         setProxyMessage({ type: "success", text: result.message });
         setTimeout(() => setProxyMessage(null), 3000);
+
+        // Refresh the current tab to use updated proxy settings
+        await ipcRenderer.invoke("refresh-current-tab");
       } else {
         setProxyMessage({ type: "error", text: result.message });
       }
@@ -126,6 +157,9 @@ export function VPNDropdown({ isOpen, onClose }: VPNDropdownProps) {
       if (result.success) {
         setProxyMessage({ type: "success", text: result.message });
         setTimeout(() => setProxyMessage(null), 3000);
+
+        // Refresh the current tab to use new proxy state
+        await ipcRenderer.invoke("refresh-current-tab");
       } else {
         setProxyMessage({ type: "error", text: result.message });
       }
@@ -180,6 +214,9 @@ export function VPNDropdown({ isOpen, onClose }: VPNDropdownProps) {
         if (result.success) {
           setProxyMessage({ type: "success", text: "Proxy disabled and VPN disconnected" });
           setTimeout(() => setProxyMessage(null), 3000);
+
+          // Refresh the current tab to use direct connection
+          await ipcRenderer.invoke("refresh-current-tab");
         }
 
         // Immediate disconnect
@@ -211,6 +248,9 @@ export function VPNDropdown({ isOpen, onClose }: VPNDropdownProps) {
         if (result.success) {
           setProxyMessage({ type: "success", text: "Proxy enabled and VPN connected" });
           setTimeout(() => setProxyMessage(null), 3000);
+
+          // Refresh the current tab to use proxy connection
+          await ipcRenderer.invoke("refresh-current-tab");
         }
 
         // Simulate connection delay
@@ -257,6 +297,9 @@ export function VPNDropdown({ isOpen, onClose }: VPNDropdownProps) {
         if (result.success) {
           setProxyMessage({ type: "success", text: `Proxy enabled and updated to ${server.ip}:${server.port}` });
           setTimeout(() => setProxyMessage(null), 3000);
+
+          // Refresh the current tab to use the new proxy
+          await ipcRenderer.invoke("refresh-current-tab");
         } else {
           setProxyMessage({ type: "error", text: "Failed to update proxy configuration" });
         }
@@ -271,6 +314,167 @@ export function VPNDropdown({ isOpen, onClose }: VPNDropdownProps) {
       }
     }
   };
+
+  const getLatencyColor = (latency: number | null) => {
+    if (latency === null) return "text-gray-400";
+    if (latency >= 999 && latency < 1000) return "text-gray-500"; // Connection issues (keep for 999ms special case)
+    if (latency <= 1000) return "text-green-500"; // Excellent
+    if (latency <= 1500) return "text-orange-500"; // Fair
+    if (latency <= 2000) return "text-yellow-500"; // Good
+    return "text-blue-500"; // Decent (2000+ms)
+  };
+
+  const getLatencyStatus = (latency: number | null) => {
+    if (latency === null) return "Unknown";
+    if (latency >= 999 && latency < 1000) return "Connection Issues"; // Keep for 999ms special case
+    if (latency <= 1000) return "Excellent";
+    if (latency <= 1500) return "Fair";
+    if (latency <= 2000) return "Good";
+    return "Decent";
+  };
+
+  const getLatencyDotColor = (latency: number | null): string => {
+    if (latency === null) return "rgb(156 163 175)"; // gray
+    if (latency >= 999 && latency < 1000) return "rgb(156 163 175)"; // gray for connection issues
+    if (latency <= 1000) return "rgb(34 197 94)"; // green for excellent
+    if (latency <= 1500) return "rgb(249 115 22)"; // orange for fair
+    if (latency <= 2000) return "rgb(234 179 8)"; // yellow for good
+    return "rgb(59 130 246)"; // blue for decent (2000+ms)
+  };
+
+  // Live latency monitoring function
+  const checkCurrentServerLatency = async () => {
+    if (!vpnState.isConnected || !vpnState.currentServer.ip) {
+      console.log(`⚠️ [checkCurrentServerLatency] Skipping latency check - not connected or no server IP`, {
+        isConnected: vpnState.isConnected,
+        serverIP: vpnState.currentServer.ip,
+      });
+      setCurrentLatency(null);
+      return;
+    }
+
+    setIsCheckingLatency(true);
+
+    try {
+      console.log(
+        `🌐 [checkCurrentServerLatency] Testing latency for ${vpnState.currentServer.ip}:${vpnState.currentServer.port}...`
+      );
+
+      const startTime = Date.now();
+      const testResult = await ipcRenderer.invoke("test-proxy-server", {
+        ip: vpnState.currentServer.ip,
+        port: vpnState.currentServer.port,
+        type: "http",
+      });
+      const endTime = Date.now();
+      const totalTime = endTime - startTime;
+
+      if (testResult.success) {
+        // Use the returned ping value or fallback to measured time
+        const latency = testResult.ping || totalTime;
+
+        // Add the new measurement to our array
+        setLatencyMeasurements((prev) => {
+          const newMeasurements = [...prev, latency];
+          // Keep only the last 10 measurements to prevent memory bloat
+          const trimmedMeasurements = newMeasurements.slice(-10);
+
+          // Calculate average of all measurements
+          const average = Math.round(
+            trimmedMeasurements.reduce((sum, val) => sum + val, 0) / trimmedMeasurements.length
+          );
+
+          console.log(`✅ [checkCurrentServerLatency] Latency measurement added:`, {
+            newLatency: latency,
+            measurementCount: trimmedMeasurements.length,
+            average: average,
+            allMeasurements: trimmedMeasurements,
+            server: `${vpnState.currentServer.ip}:${vpnState.currentServer.port}`,
+          });
+
+          // Update the current latency with the average
+          setCurrentLatency(average);
+
+          return trimmedMeasurements;
+        });
+      } else {
+        console.warn(`❌ [checkCurrentServerLatency] Latency test failed:`, {
+          error: testResult.error,
+          server: `${vpnState.currentServer.ip}:${vpnState.currentServer.port}`,
+          totalTime,
+        });
+        // Don't add failed measurements to the array, but set high latency if no measurements exist
+        if (latencyMeasurements.length === 0) {
+          setCurrentLatency(999);
+        }
+      }
+    } catch (error) {
+      console.error(`💥 [checkCurrentServerLatency] Error testing latency:`, error);
+      // Don't add failed measurements to the array, but set high latency if no measurements exist
+      if (latencyMeasurements.length === 0) {
+        setCurrentLatency(999);
+      }
+    } finally {
+      setIsCheckingLatency(false);
+    }
+  };
+
+  // Start/stop live latency monitoring
+  React.useEffect(() => {
+    if (vpnState.isConnected && isOpen) {
+      // Reset measurements and latency when dropdown opens
+      console.log(`🔄 [VPNDropdown] Dropdown opened, resetting latency measurements`);
+      setLatencyMeasurements([]);
+      setCurrentLatency(null);
+
+      // Initial check immediately
+      checkCurrentServerLatency();
+
+      // Set up periodic checking every 3 seconds for more responsive updates
+      const interval = setInterval(() => {
+        checkCurrentServerLatency();
+      }, 3000); // Changed from 10000ms to 3000ms
+
+      setLatencyInterval(interval);
+
+      return () => {
+        if (interval) {
+          clearInterval(interval);
+        }
+      };
+    } else {
+      // Clear interval and reset measurements when disconnected or dropdown closed
+      if (latencyInterval) {
+        clearInterval(latencyInterval);
+        setLatencyInterval(null);
+      }
+      console.log(`🔄 [VPNDropdown] Dropdown closed or disconnected, clearing latency data`);
+      setLatencyMeasurements([]);
+      setCurrentLatency(null);
+    }
+  }, [vpnState.isConnected, isOpen, vpnState.currentServer.ip]);
+
+  // Additional effect to immediately check latency when server changes
+  React.useEffect(() => {
+    if (vpnState.isConnected && vpnState.currentServer.ip && isOpen) {
+      console.log(
+        `🔄 [VPNDropdown] Server changed to ${vpnState.currentServer.ip}, resetting measurements and checking latency immediately`
+      );
+      // Reset measurements when server changes
+      setLatencyMeasurements([]);
+      setCurrentLatency(null);
+      checkCurrentServerLatency();
+    }
+  }, [vpnState.currentServer.id, vpnState.isConnected, isOpen]);
+
+  // Cleanup interval on unmount
+  React.useEffect(() => {
+    return () => {
+      if (latencyInterval) {
+        clearInterval(latencyInterval);
+      }
+    };
+  }, [latencyInterval]);
 
   const getSignalColor = (strength: number) => {
     if (strength >= 70) return "rgb(34 197 94)"; // green-500
@@ -294,42 +498,45 @@ export function VPNDropdown({ isOpen, onClose }: VPNDropdownProps) {
     setIsQuickSwitching(true);
 
     try {
-      // Get healthy servers (those with ping values) and sort by ping
+      // Get healthy servers (those with ping values) and sort by ping for consistent ordering
       const healthyServers = servers
-        .filter((server) => server.ping !== null && server.id !== vpnState.currentServer.id)
+        .filter((server) => server.ping !== null)
         .sort((a, b) => (a.ping || 0) - (b.ping || 0));
 
       if (healthyServers.length === 0) {
-        setProxyMessage({ type: "error", text: "No alternative servers available" });
+        setProxyMessage({ type: "error", text: "No healthy servers available" });
         setTimeout(() => setProxyMessage(null), 3000);
         return;
       }
 
-      // Find the best server (lowest ping)
-      const bestServer = healthyServers[0];
-      const currentPing = vpnState.currentServer.ping || Infinity;
-
-      // Check if the best available server has better ping than current
-      if (bestServer.ping && bestServer.ping < currentPing) {
-        // Switch to the better server
-        await handleServerSelect(bestServer);
-        setProxyMessage({
-          type: "success",
-          text: `Switched to faster server: ${bestServer.country} (${bestServer.ping}ms)`,
-        });
-      } else {
-        // Current server is already the best, try the next best option
-        const nextBestServer = healthyServers.find((server) => server.ping && server.ping !== bestServer.ping);
-        if (nextBestServer) {
-          await handleServerSelect(nextBestServer);
-          setProxyMessage({
-            type: "success",
-            text: `Switched to alternative server: ${nextBestServer.country} (${nextBestServer.ping}ms)`,
-          });
-        } else {
-          setProxyMessage({ type: "error", text: "Already using the optimal server" });
-        }
+      if (healthyServers.length === 1) {
+        setProxyMessage({ type: "error", text: "Only one healthy server available" });
+        setTimeout(() => setProxyMessage(null), 3000);
+        return;
       }
+
+      // Find the current server's index in the healthy servers list
+      const currentServerIndex = healthyServers.findIndex((server) => server.id === vpnState.currentServer.id);
+
+      // If current server is not found in healthy servers, start from the first one
+      // Otherwise, move to the next server (cycling back to the beginning if at the end)
+      let nextServerIndex;
+      if (currentServerIndex === -1) {
+        nextServerIndex = 0;
+      } else {
+        nextServerIndex = (currentServerIndex + 1) % healthyServers.length;
+      }
+
+      const nextServer = healthyServers[nextServerIndex];
+
+      // Switch to the next server
+      await handleServerSelect(nextServer);
+      setProxyMessage({
+        type: "success",
+        text: `Switched to: ${nextServer.country} (${nextServer.ping}ms) - ${nextServerIndex + 1}/${
+          healthyServers.length
+        }`,
+      });
 
       setTimeout(() => setProxyMessage(null), 3000);
     } catch (error) {
@@ -598,17 +805,47 @@ export function VPNDropdown({ isOpen, onClose }: VPNDropdownProps) {
                     </motion.span>
                   </div>
 
-                  {/* Signal Strength */}
+                  {/* Auto-Switch Status */}
+                  {proxyMessage?.text.includes("Auto-Switched") && (
+                    <motion.div
+                      initial={{ opacity: 0, y: -10 }}
+                      animate={{ opacity: 1, y: 0 }}
+                      exit={{ opacity: 0, y: -10 }}
+                      className="flex items-center justify-between mb-4 p-2 bg-blue-50 rounded-lg border border-blue-200"
+                    >
+                      <div className="flex items-center">
+                        <motion.div
+                          animate={{ scale: [1, 1.2, 1] }}
+                          transition={{ duration: 2, repeat: Infinity, ease: "easeInOut" }}
+                          className="mr-2"
+                        >
+                          <FiCheck className="w-4 h-4 text-blue-600" />
+                        </motion.div>
+                        <span className="text-sm font-medium text-blue-700">Server Auto-Switched</span>
+                      </div>
+                      <div className="text-xs text-blue-600">Connection Recovered</div>
+                    </motion.div>
+                  )}
+
+                  {/* Live Latency */}
                   {vpnState.isConnected && (
                     <div className="space-y-4 mb-4">
                       <div className="flex items-center justify-between">
-                        <span className="text-gray-600">Signal Strength</span>
+                        <span className="text-gray-600">Live Latency</span>
                         <div className="flex items-center">
-                          <div className="relative mr-3">
+                          {isCheckingLatency ? (
+                            <motion.div
+                              animate={{ rotate: 360 }}
+                              transition={{ duration: 1, repeat: Infinity, ease: "linear" }}
+                              className="mr-3"
+                            >
+                              <FiRefreshCw className="w-4 h-4 text-violet-600" />
+                            </motion.div>
+                          ) : (
                             <motion.div
                               animate={{
-                                scale: [1, 1.2, 1],
-                                opacity: [0.5, 1, 0.5],
+                                scale: currentLatency !== null ? [1, 1.2, 1] : 1,
+                                opacity: currentLatency !== null ? [0.5, 1, 0.5] : 1,
                               }}
                               transition={{
                                 duration: 2,
@@ -619,11 +856,19 @@ export function VPNDropdown({ isOpen, onClose }: VPNDropdownProps) {
                                 width: "12px",
                                 height: "12px",
                                 borderRadius: "50%",
-                                backgroundColor: getSignalColor(vpnState.signalStrength),
+                                backgroundColor: getLatencyDotColor(currentLatency),
                               }}
+                              className="mr-3"
                             />
+                          )}
+                          <div className="text-right">
+                            <span className={`font-medium ${getLatencyColor(currentLatency)}`}>
+                              {currentLatency !== null ? `${currentLatency}ms` : "N/A"}
+                            </span>
+                            <div className={`text-xs ${getLatencyColor(currentLatency)}`}>
+                              {getLatencyStatus(currentLatency)}
+                            </div>
                           </div>
-                          <span className="font-medium text-violet-600">{vpnState.signalStrength}%</span>
                         </div>
                       </div>
 

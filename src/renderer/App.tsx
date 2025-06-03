@@ -18,6 +18,8 @@ import {
   LockClosedIcon,
   CogIcon,
 } from "@heroicons/react/24/outline";
+import { useVPNStore } from "./stores/vpnStore";
+import { useServerStore } from "./stores/serverStore";
 
 export default function App() {
   const [tabs, setTabs] = useState<Tab[]>(() => [
@@ -52,6 +54,15 @@ export default function App() {
   const webviewRefs = useRef<{ [key: string]: React.RefObject<WebviewTag> }>({});
   const inputRef = useRef<HTMLInputElement>(null);
 
+  // VPN and server store integration
+  const { vpnState } = useVPNStore();
+  const { servers } = useServerStore();
+
+  // Auto-switch state management
+  const [isAutoSwitching, setIsAutoSwitching] = useState(false);
+  const [lastAutoSwitchTime, setLastAutoSwitchTime] = useState(0);
+  const [failedServerIds, setFailedServerIds] = useState<Set<string>>(new Set());
+
   const activeTab = tabs.find((tab) => tab.id === activeTabId)!;
 
   // Initialize ref for new tab
@@ -68,6 +79,42 @@ export default function App() {
   useEffect(() => {
     localStorage.setItem("browsing-history", JSON.stringify(history));
   }, [history]);
+
+  // Add IPC listener for refreshing current tab after server switch
+  useEffect(() => {
+    const { ipcRenderer } = window.require("electron");
+
+    const handleRefreshCurrentTab = () => {
+      const webview = webviewRefs.current[activeTabId]?.current;
+      if (webview && activeTab?.state === "normal") {
+        console.log("Refreshing current tab after server switch");
+        webview.reload();
+      }
+    };
+
+    ipcRenderer.on("refresh-current-tab", handleRefreshCurrentTab);
+
+    return () => {
+      ipcRenderer.removeListener("refresh-current-tab", handleRefreshCurrentTab);
+    };
+  }, [activeTabId, activeTab?.state]);
+
+  // Request notification permissions for auto-switch notifications
+  useEffect(() => {
+    if (window.Notification && Notification.permission === "default") {
+      Notification.requestPermission().then((permission) => {
+        console.log("Notification permission:", permission);
+      });
+    }
+  }, []);
+
+  // Reset failed servers list when VPN disconnects
+  useEffect(() => {
+    if (!vpnState.isConnected) {
+      setFailedServerIds(new Set());
+      setIsAutoSwitching(false);
+    }
+  }, [vpnState.isConnected]);
 
   const addToHistory = (url: string, title: string, favicon?: string) => {
     // Don't add certain URLs to history
@@ -262,12 +309,49 @@ export default function App() {
       const handleDidFailLoad = (event: any) => {
         // Only handle main frame errors, not subframe errors
         if (event.isMainFrame) {
+          console.log(`🌐 [WebviewError] Main frame error detected:`, {
+            errorCode: event.errorCode,
+            errorDescription: event.errorDescription,
+            validatedURL: event.validatedURL,
+            isVPNConnected: vpnState.isConnected,
+            currentServer: vpnState.isConnected
+              ? `${vpnState.currentServer.country} (${vpnState.currentServer.ip}:${vpnState.currentServer.port})`
+              : "N/A",
+          });
+
           // Filter out internal Electron errors that shouldn't show error pages
           const ignoredErrorCodes = [
             "GUEST_VIEW_MANAGER_CALL",
             "ERR_ABORTED", // When user navigates away before page loads
             "ERR_FAILED", // Generic failure that's often not user-facing
           ];
+
+          // Proxy connection failure error codes that should trigger auto-switch
+          const proxyFailureErrorCodes = [
+            "ERR_TUNNEL_CONNECTION_FAILED",
+            "ERR_PROXY_CONNECTION_FAILED",
+            "ERR_PROXY_AUTH_FAILED",
+            "ERR_PROXY_AUTH_REQUESTED",
+            "ERR_NO_SUPPORTED_PROXIES",
+            "ERR_MANDATORY_PROXY_CONFIGURATION_FAILED",
+            "ERR_PROXY_CERTIFICATE_INVALID",
+          ];
+
+          // Check if this is a proxy-related failure and VPN is connected
+          if (proxyFailureErrorCodes.includes(event.errorCode) && vpnState.isConnected) {
+            console.warn(`🚨 [ProxyFailure] Detected proxy failure: ${event.errorCode} - ${event.errorDescription}`);
+            console.log(
+              `🔄 [ProxyFailure] Current server: ${vpnState.currentServer.country} (${vpnState.currentServer.ip}:${vpnState.currentServer.port})`
+            );
+            console.log(`🔄 [ProxyFailure] Triggering automatic server switch...`);
+
+            // Trigger automatic server switch
+            handleAutoServerSwitch();
+
+            // Don't show error page for proxy failures, let auto-switch handle it
+            console.log("🔄 [ProxyFailure] Auto-switch triggered, avoiding error page display");
+            return;
+          }
 
           // Only show error page for actual navigation/network errors
           const userFacingErrorCodes = [
@@ -284,7 +368,7 @@ export default function App() {
             "ERR_CONNECTION_RESET",
             "ERR_CONNECTION_CLOSED",
             "ERR_ADDRESS_UNREACHABLE",
-            "ERR_PROXY_CONNECTION_FAILED",
+            ...proxyFailureErrorCodes, // Include proxy errors in case auto-switch fails
           ];
 
           if (ignoredErrorCodes.includes(event.errorCode)) {
@@ -452,6 +536,115 @@ export default function App() {
       });
       const homeUrl = "https://www.google.com";
       webview.loadURL(homeUrl);
+    }
+  };
+
+  // Automatic server switching function
+  const handleAutoServerSwitch = async () => {
+    if (!vpnState.isConnected || isAutoSwitching || servers.length === 0) {
+      console.log("⚠️ [AutoSwitch] Skipping auto-switch:", {
+        isConnected: vpnState.isConnected,
+        isAutoSwitching,
+        serverCount: servers.length,
+      });
+      return;
+    }
+
+    // Rate limiting: don't auto-switch more than once every 10 seconds
+    const now = Date.now();
+    if (now - lastAutoSwitchTime < 10000) {
+      console.log("⏳ [AutoSwitch] Rate limited - too soon since last switch");
+      return;
+    }
+
+    console.log("🔄 [AutoSwitch] Starting automatic server switch due to connection failure");
+    setIsAutoSwitching(true);
+    setLastAutoSwitchTime(now);
+
+    try {
+      const { ipcRenderer } = window.require("electron");
+
+      // Mark current server as failed
+      const currentServerId = vpnState.currentServer.id;
+      setFailedServerIds((prev) => new Set(prev).add(currentServerId));
+
+      // Get healthy servers that haven't failed recently, sorted by ping
+      const availableServers = servers
+        .filter((server) => server.ping !== null && !failedServerIds.has(server.id) && server.id !== currentServerId)
+        .sort((a, b) => (a.ping || 0) - (b.ping || 0));
+
+      if (availableServers.length === 0) {
+        console.warn("⚠️ [AutoSwitch] No alternative servers available, clearing failed list and retrying");
+        // Reset failed servers list if all are marked as failed
+        setFailedServerIds(new Set());
+
+        // Try with the full server list (excluding current)
+        const fallbackServers = servers
+          .filter((server) => server.ping !== null && server.id !== currentServerId)
+          .sort((a, b) => (a.ping || 0) - (b.ping || 0));
+
+        if (fallbackServers.length === 0) {
+          console.error("❌ [AutoSwitch] No working servers found");
+          return;
+        }
+
+        availableServers.push(...fallbackServers);
+      }
+
+      // Select the best available server (lowest ping)
+      const newServer = availableServers[0];
+      console.log(
+        `🎯 [AutoSwitch] Switching to server: ${newServer.country} (${newServer.ip}:${newServer.port}, ${newServer.ping}ms)`
+      );
+
+      // Update VPN state
+      const { setCurrentServer } = useVPNStore.getState();
+      setCurrentServer(newServer);
+
+      // Update proxy configuration
+      const proxyConfig = {
+        enabled: true,
+        host: newServer.ip,
+        port: newServer.port,
+        type: "http" as const,
+      };
+
+      const result = await ipcRenderer.invoke("set-proxy-config", proxyConfig);
+
+      if (result.success) {
+        console.log(`✅ [AutoSwitch] Successfully switched to ${newServer.country}`);
+
+        // Refresh current tab to use new proxy
+        await ipcRenderer.invoke("refresh-current-tab");
+
+        // Send auto-switch message to VPN dropdown
+        const autoSwitchEvent = new CustomEvent("auto-switch-complete", {
+          detail: {
+            newServer: newServer,
+            message: `Auto-switched to ${newServer.country} due to connection issues`,
+          },
+        });
+        window.dispatchEvent(autoSwitchEvent);
+
+        // Show notification to user
+        if (window.Notification && Notification.permission === "granted") {
+          new Notification("Server Auto-Switched", {
+            body: `Switched to ${newServer.country} due to connection issues`,
+            icon: icognifiLogo,
+          });
+        }
+      } else {
+        console.error("❌ [AutoSwitch] Failed to configure new proxy:", result.message);
+      }
+    } catch (error) {
+      console.error("💥 [AutoSwitch] Error during automatic server switch:", error);
+    } finally {
+      setIsAutoSwitching(false);
+
+      // Clear failed servers list after 5 minutes to allow retry
+      setTimeout(() => {
+        setFailedServerIds(new Set());
+      }, 5 * 60 * 1000);
     }
   };
 

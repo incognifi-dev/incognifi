@@ -278,29 +278,48 @@ export function ServerList({ onSelect, currentServer }: ServerListProps) {
           try {
             console.log(`🌐 [checkServerPings] Testing proxy functionality for ${server.ip}:${server.port}...`);
 
-            // Test the proxy server by trying to fetch a test website through it
-            const testResult = await ipcRenderer.invoke("test-proxy-server", {
-              ip: server.ip,
-              port: server.port,
-              type: "http", // Most proxies in our list are HTTP proxies
-            });
+            // Test the proxy server 3 times and calculate average
+            const testResults = [];
+            for (let attempt = 1; attempt <= 3; attempt++) {
+              console.log(`🔍 [checkServerPings] Test ${attempt}/3 for ${server.ip}:${server.port}`);
 
-            if (testResult.success) {
-              console.log(`✅ [checkServerPings] Proxy test successful for ${server.ip}:`, {
-                ping: testResult.ping,
-                success: true,
+              const testResult = await ipcRenderer.invoke("test-proxy-server", {
+                ip: server.ip,
+                port: server.port,
+                type: "http", // Most proxies in our list are HTTP proxies
               });
 
-              updateServerPing(server.id, testResult.ping);
+              if (testResult.success) {
+                testResults.push(testResult.ping);
+                console.log(
+                  `✅ [checkServerPings] Test ${attempt}/3 successful for ${server.ip}: ${testResult.ping}ms`
+                );
+              } else {
+                console.warn(`❌ [checkServerPings] Test ${attempt}/3 failed for ${server.ip}:`, testResult.error);
+              }
+
+              // Small delay between attempts (only for same server)
+              if (attempt < 3) {
+                await new Promise((resolve) => setTimeout(resolve, 100));
+              }
+            }
+
+            // Calculate average if we have at least one successful test
+            if (testResults.length > 0) {
+              const averagePing = Math.round(testResults.reduce((sum, ping) => sum + ping, 0) / testResults.length);
+
+              console.log(`✅ [checkServerPings] Server ${server.ip} final result:`, {
+                successfulTests: testResults.length,
+                measurements: testResults,
+                averagePing: averagePing,
+                discardedTests: 3 - testResults.length,
+              });
+
+              updateServerPing(server.id, averagePing);
               workingServers.push(server.id);
-              return { serverId: server.id, ping: testResult.ping, success: true };
+              return { serverId: server.id, ping: averagePing, success: true };
             } else {
-              console.warn(`❌ [checkServerPings] Proxy test failed for ${server.ip}:`, {
-                error: testResult.error,
-                success: false,
-              });
-
-              // Don't update ping for failed servers - they'll be filtered out
+              console.warn(`❌ [checkServerPings] All tests failed for ${server.ip} - discarding server`);
               return { serverId: server.id, ping: null, success: false };
             }
           } catch (error) {
@@ -454,9 +473,10 @@ export function ServerList({ onSelect, currentServer }: ServerListProps) {
 
   const getPingColor = (ping: number | null) => {
     if (ping === null) return "text-gray-400";
-    if (ping < 50) return "text-green-500";
-    if (ping < 100) return "text-yellow-500";
-    return "text-red-500";
+    if (ping <= 1000) return "text-green-500"; // Excellent
+    if (ping <= 1500) return "text-orange-500"; // Fair
+    if (ping <= 2000) return "text-yellow-500"; // Good
+    return "text-blue-500"; // Decent (2000+ms)
   };
 
   const handleRefresh = () => {
