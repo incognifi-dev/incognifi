@@ -237,6 +237,7 @@ function createWindow() {
     titleBarStyle: process.platform === "darwin" ? "hiddenInset" : "default",
     trafficLightPosition: { x: 20, y: 20 },
     show: false,
+    autoHideMenuBar: true,
     webPreferences: {
       nodeIntegration: true,
       contextIsolation: false,
@@ -247,6 +248,9 @@ function createWindow() {
       experimentalFeatures: true,
     },
   });
+
+  // Hide the menu bar completely on all platforms
+  Menu.setApplicationMenu(null);
 
   // Show window when ready to prevent white screen
   mainWindow.once("ready-to-show", () => {
