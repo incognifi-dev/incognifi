@@ -8,6 +8,9 @@ interface Server {
   ip: string;
   port: number;
   ping: number | null;
+  isHealthy: boolean;
+  lastChecked: number;
+  type: string;
 }
 
 interface VPNState {
@@ -31,6 +34,9 @@ const INITIAL_SERVER: Server = {
   ip: "127.0.0.1",
   port: 8080,
   ping: null,
+  isHealthy: true,
+  lastChecked: Date.now(),
+  type: "http",
 };
 
 const INITIAL_VPN_STATE: VPNState = {

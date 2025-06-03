@@ -29,10 +29,14 @@ interface VPNDropdownProps {
 interface Server {
   id: string;
   country: string;
+  countryCode?: string;
   city: string;
   ip: string;
   port: number;
   ping: number | null;
+  isHealthy: boolean;
+  lastChecked: number;
+  type: string;
 }
 
 interface ProxyConfigType {
@@ -52,6 +56,8 @@ export function VPNDropdown({ isOpen, onClose }: VPNDropdownProps) {
   const [showServerList, setShowServerList] = React.useState(false);
   const [showProxyConfig, setShowProxyConfig] = React.useState(false);
   const [hasAutoOpened, setHasAutoOpened] = React.useState(false);
+
+  // dsa
 
   // Get clearServers function from store
   const { clearServers, servers } = useServerStore();

@@ -45,6 +45,7 @@ if (!rootElement) {
   try {
     console.log("🔄 Creating React root...");
     const root = ReactDOM.createRoot(rootElement);
+
     console.log("🔄 Rendering App...");
 
     root.render(

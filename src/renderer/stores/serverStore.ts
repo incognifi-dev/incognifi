@@ -9,13 +9,15 @@ interface Server {
   ip: string;
   port: number;
   ping: number | null;
+  isHealthy: boolean;
+  lastChecked: number;
+  type: string;
 }
 
 interface ServerStore {
   servers: Server[];
   lastFetched: number | null;
   isLoading: boolean;
-  isLoadingLocations: boolean;
   isLoadingPing: boolean;
   pingProgress: { completed: number; total: number };
   error: string | null;
@@ -23,7 +25,6 @@ interface ServerStore {
   // Actions
   setServers: (servers: Server[]) => void;
   setLoading: (loading: boolean) => void;
-  setLoadingLocations: (loading: boolean) => void;
   setLoadingPing: (loading: boolean) => void;
   setPingProgress: (completed: number, total: number) => void;
   updateServerPing: (serverId: string, ping: number | null) => void;
@@ -40,7 +41,6 @@ export const useServerStore = create<ServerStore>()(
       servers: [],
       lastFetched: null,
       isLoading: false,
-      isLoadingLocations: false,
       isLoadingPing: false,
       pingProgress: { completed: 0, total: 0 },
       error: null,
@@ -54,6 +54,8 @@ export const useServerStore = create<ServerStore>()(
             country: s.country,
             countryCode: s.countryCode,
             city: s.city,
+            isHealthy: s.isHealthy,
+            type: s.type,
           })),
         });
 
@@ -67,11 +69,6 @@ export const useServerStore = create<ServerStore>()(
       setLoading: (loading: boolean) => {
         console.log(`⏳ [ServerStore] Setting loading state: ${loading}`);
         set({ isLoading: loading });
-      },
-
-      setLoadingLocations: (loading: boolean) => {
-        console.log(`🌍 [ServerStore] Setting location loading state: ${loading}`);
-        set({ isLoadingLocations: loading });
       },
 
       setLoadingPing: (loading: boolean) => {

@@ -16,6 +16,8 @@ export const TabsBar: React.FC<TabsBarProps> = ({ tabs, activeTabId, onTabClick,
   const [isVPNDropdownOpen, setIsVPNDropdownOpen] = useState(false);
   const [hasAutoOpened, setHasAutoOpened] = useState(false);
 
+  console.log("works");
+
   // Auto-open VPN dropdown when app first starts
   useEffect(() => {
     if (!hasAutoOpened) {

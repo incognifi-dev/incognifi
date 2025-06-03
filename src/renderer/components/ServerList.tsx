@@ -11,6 +11,9 @@ interface Server {
   ip: string;
   port: number;
   ping: number | null;
+  isHealthy: boolean;
+  lastChecked: number;
+  type: string;
 }
 
 interface ServerListProps {
@@ -30,43 +33,42 @@ const getCountryFlag = (countryCode?: string): string => {
   return String.fromCodePoint(...codePoints);
 };
 
-// Function to fetch proxy list from the URL
-const fetchProxyList = async (): Promise<Server[]> => {
-  console.log("📋 [fetchProxyList] Starting to parse hardcoded proxy list");
+// Function to fetch healthy proxy list from the external API
+const fetchHealthyProxyList = async (): Promise<Server[]> => {
+  console.log("📋 [fetchHealthyProxyList] Fetching healthy proxies from external API");
 
   try {
-    const response = await fetch(
-      "https://raw.githubusercontent.com/monosans/proxy-list/refs/heads/main/proxies/http.txt"
-    );
-    const text = await response.text();
+    const response = await fetch("http://localhost:5001/api/proxies");
 
-    const servers: Server[] = text
-      .split("\n")
-      .filter((line) => line.trim() && line.includes(":"))
-      .map((line, index) => {
-        const [ip, portStr] = line.trim().split(":");
-        const port = parseInt(portStr, 10);
+    if (!response.ok) {
+      throw new Error(`HTTP error! status: ${response.status}`);
+    }
 
-        return {
-          id: `proxy_${index}`,
-          country: "N/A",
-          countryCode: undefined,
-          city: "N/A",
-          ip,
-          port,
-          ping: null,
-        };
-      });
+    const data = await response.json();
 
-    console.log("✅ [fetchProxyList] Successfully parsed proxy list:", {
+    const servers: Server[] = data.proxies.map((proxy: any) => ({
+      id: proxy.id,
+      country: proxy.country,
+      countryCode: proxy.countryCode,
+      city: proxy.city,
+      ip: proxy.ip,
+      port: proxy.port,
+      ping: null, // Will be set during latency testing
+      isHealthy: proxy.isHealthy,
+      lastChecked: proxy.lastChecked,
+      type: proxy.type,
+    }));
+
+    console.log("✅ [fetchHealthyProxyList] Successfully fetched healthy proxy list:", {
       totalServers: servers.length,
-      sampleIPs: servers.slice(0, 5).map((s) => s.ip),
+      metadata: data.metadata,
+      sampleProxies: servers.slice(0, 3).map((s) => ({ ip: s.ip, country: s.country })),
     });
 
     return servers;
   } catch (error) {
-    console.error("❌ [fetchProxyList] Failed to fetch proxy list:", error);
-    return [];
+    console.error("❌ [fetchHealthyProxyList] Failed to fetch healthy proxy list:", error);
+    throw error;
   }
 };
 
@@ -77,17 +79,15 @@ export function ServerList({ onSelect, currentServer }: ServerListProps) {
   const [sortField, setSortField] = useState<SortField>("ping");
   const [sortDirection, setSortDirection] = useState<"asc" | "desc">("asc");
 
-  // Use Zustand store - Updated to include ping-related state
+  // Use Zustand store - Updated to remove location loading state
   const {
     servers,
     isLoading,
-    isLoadingLocations,
     isLoadingPing,
     pingProgress,
     error,
     setServers,
     setLoading,
-    setLoadingLocations,
     setLoadingPing,
     setPingProgress,
     updateServerPing,
@@ -104,142 +104,16 @@ export function ServerList({ onSelect, currentServer }: ServerListProps) {
     } else {
       console.log("💾 [ServerList] Using cached servers:", {
         count: servers.length,
-        hasLocations: servers.some((s) => s.country !== "N/A"),
+        healthyCount: servers.filter((s) => s.isHealthy).length,
       });
     }
   }, []);
 
-  // Function to fetch location data in batches
-  const fetchLocationData = async (servers: Server[]): Promise<Server[]> => {
-    console.log("🌍 [fetchLocationData] Starting location fetch process:", {
+  // Function to test proxy latency only (health is already verified by external server)
+  const checkServerLatency = async (servers: Server[]) => {
+    console.log("🔍 [checkServerLatency] Starting latency testing for healthy proxies:", {
       totalServers: servers.length,
-      uniqueIPs: [...new Set(servers.map((s) => s.ip))].length,
-    });
-
-    try {
-      setLoadingLocations(true);
-
-      // Extract unique IP addresses
-      const ipAddresses = [...new Set(servers.map((server) => server.ip))];
-      console.log("🔍 [fetchLocationData] Extracted unique IPs:", ipAddresses.length);
-
-      // Split into batches of 100 (API limit)
-      const batchSize = 100;
-      const batches = [];
-      for (let i = 0; i < ipAddresses.length; i += batchSize) {
-        batches.push(ipAddresses.slice(i, i + batchSize));
-      }
-
-      console.log("📦 [fetchLocationData] Split into batches:", {
-        totalBatches: batches.length,
-        batchSize,
-        batchSizes: batches.map((b) => b.length),
-      });
-
-      const locationMap = new Map<string, any>();
-
-      // Process each batch
-      for (let batchIndex = 0; batchIndex < batches.length; batchIndex++) {
-        const batch = batches[batchIndex];
-        console.log(`🔄 [fetchLocationData] Processing batch ${batchIndex + 1}/${batches.length}:`, {
-          batchSize: batch.length,
-          firstIP: batch[0],
-          lastIP: batch[batch.length - 1],
-        });
-
-        try {
-          const response = await fetch("http://ip-api.com/batch", {
-            method: "POST",
-            headers: {
-              "Content-Type": "application/json",
-            },
-            body: JSON.stringify(batch),
-          });
-
-          if (response.ok) {
-            const locationData = await response.json();
-            console.log(`✅ [fetchLocationData] Batch ${batchIndex + 1} successful:`, {
-              received: locationData.length,
-              successful: locationData.filter((d: any) => d.status === "success" || d.country).length,
-            });
-
-            // Map the results back to IP addresses
-            locationData.forEach((data: any, index: number) => {
-              const ip = batch[index];
-              if (data && (data.status === "success" || data.country)) {
-                locationMap.set(ip, data);
-                console.log(`📍 [fetchLocationData] Mapped location for ${ip}:`, {
-                  country: data.country,
-                  countryCode: data.countryCode,
-                  city: data.city,
-                  status: data.status,
-                });
-              } else {
-                console.warn(`⚠️ [fetchLocationData] No location data for ${ip}:`, data);
-              }
-            });
-          } else {
-            console.error(`❌ [fetchLocationData] Batch ${batchIndex + 1} failed:`, {
-              status: response.status,
-              statusText: response.statusText,
-            });
-          }
-
-          // Add a small delay between batches to respect rate limits
-          if (batchIndex < batches.length - 1) {
-            console.log("⏳ [fetchLocationData] Waiting 1 second before next batch...");
-            await new Promise((resolve) => setTimeout(resolve, 1000));
-          }
-        } catch (batchError) {
-          console.error(`❌ [fetchLocationData] Batch ${batchIndex + 1} error:`, batchError);
-        }
-      }
-
-      console.log("🎯 [fetchLocationData] Location mapping complete:", {
-        totalMapped: locationMap.size,
-        totalServers: servers.length,
-      });
-
-      // Update servers with location data
-      const updatedServers = servers.map((server) => {
-        const locationData = locationMap.get(server.ip);
-        if (locationData) {
-          const updatedServer = {
-            ...server,
-            country: locationData.country || locationData.countryCode || "Unknown",
-            countryCode: locationData.countryCode || undefined,
-            city: locationData.city || "Unknown",
-          };
-          console.log(`🏷️ [fetchLocationData] Updated server ${server.ip}:`, {
-            before: { country: server.country, city: server.city },
-            after: { country: updatedServer.country, countryCode: updatedServer.countryCode, city: updatedServer.city },
-          });
-          return updatedServer;
-        }
-        return server;
-      });
-
-      const locationsFound = updatedServers.filter((s) => s.country !== "N/A" && s.country !== "Unknown").length;
-      console.log("🎉 [fetchLocationData] Location fetching complete:", {
-        totalServers: updatedServers.length,
-        locationsFound,
-        successRate: `${Math.round((locationsFound / updatedServers.length) * 100)}%`,
-      });
-
-      return updatedServers;
-    } catch (error) {
-      console.error("💥 [fetchLocationData] Fatal error during location fetching:", error);
-      return servers;
-    } finally {
-      setLoadingLocations(false);
-    }
-  };
-
-  // Function to test proxy servers in batches by actually proxying web requests
-  const checkServerPings = async (servers: Server[]) => {
-    console.log("🔍 [checkServerPings] Starting proxy health checks:", {
-      totalServers: servers.length,
-      batchSize: 3, // Increased batch size since httpbin has no rate limits
+      batchSize: 1, // Test one by one as requested
     });
 
     // Since contextIsolation is false, we can access electron directly
@@ -249,120 +123,85 @@ export function ServerList({ onSelect, currentServer }: ServerListProps) {
       setLoadingPing(true);
       setPingProgress(0, servers.length);
 
-      // Process servers in larger batches since httpbin.org has no rate limits
-      const batchSize = 10;
-      const batches = [];
-      for (let i = 0; i < servers.length; i += batchSize) {
-        batches.push(servers.slice(i, i + batchSize));
-      }
-
-      console.log("📦 [checkServerPings] Split into batches:", {
-        totalBatches: batches.length,
-        batchSize,
-        batchSizes: batches.map((b) => b.length),
-      });
-
       let completedCount = 0;
-      const workingServers: string[] = []; // Track servers that successfully proxy
 
-      // Process each batch
-      for (let batchIndex = 0; batchIndex < batches.length; batchIndex++) {
-        const batch = batches[batchIndex];
-        console.log(`🔄 [checkServerPings] Testing batch ${batchIndex + 1}/${batches.length}:`, {
-          batchSize: batch.length,
-          servers: batch.map((s) => s.ip),
-        });
+      // Process servers one by one as requested
+      for (let i = 0; i < servers.length; i++) {
+        const server = servers[i];
+        console.log(
+          `🔄 [checkServerLatency] Testing latency ${i + 1}/${servers.length} for ${server.ip}:${server.port}`
+        );
 
-        // Process all servers in the batch concurrently
-        const testPromises = batch.map(async (server) => {
-          try {
-            console.log(`🌐 [checkServerPings] Testing proxy functionality for ${server.ip}:${server.port}...`);
+        try {
+          // Test the proxy server 3 times and calculate average latency
+          const testResults = [];
+          for (let attempt = 1; attempt <= 1; attempt++) {
+            console.log(`🔍 [checkServerLatency] Latency test ${attempt}/3 for ${server.ip}:${server.port}`);
 
-            // Test the proxy server 3 times and calculate average
-            const testResults = [];
-            for (let attempt = 1; attempt <= 3; attempt++) {
-              console.log(`🔍 [checkServerPings] Test ${attempt}/3 for ${server.ip}:${server.port}`);
+            const testResult = await ipcRenderer.invoke("test-proxy-server", {
+              ip: server.ip,
+              port: server.port,
+              type: server.type,
+            });
 
-              const testResult = await ipcRenderer.invoke("test-proxy-server", {
-                ip: server.ip,
-                port: server.port,
-                type: "http", // Most proxies in our list are HTTP proxies
-              });
-
-              if (testResult.success) {
-                testResults.push(testResult.ping);
-                console.log(
-                  `✅ [checkServerPings] Test ${attempt}/3 successful for ${server.ip}: ${testResult.ping}ms`
-                );
-              } else {
-                console.warn(`❌ [checkServerPings] Test ${attempt}/3 failed for ${server.ip}:`, testResult.error);
-              }
-
-              // Small delay between attempts (only for same server)
-              if (attempt < 3) {
-                await new Promise((resolve) => setTimeout(resolve, 100));
-              }
-            }
-
-            // Calculate average if we have at least one successful test
-            if (testResults.length > 0) {
-              const averagePing = Math.round(testResults.reduce((sum, ping) => sum + ping, 0) / testResults.length);
-
-              console.log(`✅ [checkServerPings] Server ${server.ip} final result:`, {
-                successfulTests: testResults.length,
-                measurements: testResults,
-                averagePing: averagePing,
-                discardedTests: 3 - testResults.length,
-              });
-
-              updateServerPing(server.id, averagePing);
-              workingServers.push(server.id);
-              return { serverId: server.id, ping: averagePing, success: true };
+            if (testResult.success) {
+              testResults.push(testResult.ping);
+              console.log(
+                `✅ [checkServerLatency] Test ${attempt}/3 successful for ${server.ip}: ${testResult.ping}ms`
+              );
             } else {
-              console.warn(`❌ [checkServerPings] All tests failed for ${server.ip} - discarding server`);
-              return { serverId: server.id, ping: null, success: false };
+              console.warn(`❌ [checkServerLatency] Test ${attempt}/3 failed for ${server.ip}:`, testResult.error);
             }
-          } catch (error) {
-            console.error(`💥 [checkServerPings] Error testing proxy ${server.ip}:`, error);
-            return { serverId: server.id, ping: null, success: false };
-          }
-        });
 
-        // Wait for all tests in the batch to complete
-        const batchResults = await Promise.all(testPromises);
-        completedCount += batch.length;
+            // Small delay between attempts (only for same server)
+            if (attempt < 3) {
+              await new Promise((resolve) => setTimeout(resolve, 100));
+            }
+          }
+
+          // Calculate average if we have at least one successful test
+          if (testResults.length > 0) {
+            const averagePing = Math.round(testResults.reduce((sum, ping) => sum + ping, 0) / testResults.length);
+
+            console.log(`✅ [checkServerLatency] Server ${server.ip} latency result:`, {
+              successfulTests: testResults.length,
+              measurements: testResults,
+              averagePing: averagePing,
+              discardedTests: 3 - testResults.length,
+            });
+
+            updateServerPing(server.id, averagePing);
+          } else {
+            console.warn(
+              `❌ [checkServerLatency] All latency tests failed for ${server.ip} - keeping server but with no ping`
+            );
+            // Keep the server since it's healthy according to external server, just no ping data
+            updateServerPing(server.id, null);
+          }
+        } catch (error) {
+          console.error(`💥 [checkServerLatency] Error testing latency for ${server.ip}:`, error);
+          updateServerPing(server.id, null);
+        }
+
+        completedCount++;
         setPingProgress(completedCount, servers.length);
 
-        console.log(`✅ [checkServerPings] Batch ${batchIndex + 1} completed:`, {
-          successful: batchResults.filter((r) => r.success).length,
-          failed: batchResults.filter((r) => !r.success).length,
-          progress: `${completedCount}/${servers.length}`,
-        });
+        console.log(`✅ [checkServerLatency] Completed ${completedCount}/${servers.length}`);
 
-        // Minimal delay between batches since httpbin.org has no rate limits
-        if (batchIndex < batches.length - 1) {
-          console.log("⏳ [checkServerPings] Waiting 500ms before next batch...");
-          await new Promise((resolve) => setTimeout(resolve, 500));
+        // Small delay between servers to prevent overwhelming
+        if (i < servers.length - 1) {
+          console.log("⏳ [checkServerLatency] Waiting 200ms before next server...");
+          await new Promise((resolve) => setTimeout(resolve, 200));
         }
       }
 
-      // Get the current servers from the store (which have updated ping values)
-      // and filter out non-working servers
-      const { servers: currentServers } = useServerStore.getState();
-      const workingServerList = currentServers.filter((server) => workingServers.includes(server.id));
-
-      console.log("🎉 [checkServerPings] Proxy health checks completed:", {
+      console.log("🎉 [checkServerLatency] Latency testing completed:", {
         totalServers: servers.length,
-        workingServers: workingServerList.length,
-        removedServers: servers.length - workingServerList.length,
-        successRate: `${Math.round((workingServerList.length / servers.length) * 100)}%`,
+        serversWithPing: servers.filter((s) => s.ping !== null).length,
       });
-
-      // Only keep the working servers with their updated ping values
-      setServers(workingServerList);
     } catch (error) {
-      console.error("💥 [checkServerPings] Fatal error during proxy health checking:", error);
-      setError("Failed to test proxy server health");
+      console.error("💥 [checkServerLatency] Fatal error during latency testing:", error);
+      setError("Failed to test proxy server latency");
     } finally {
       setLoadingPing(false);
     }
@@ -374,21 +213,16 @@ export function ServerList({ onSelect, currentServer }: ServerListProps) {
     setError(null);
 
     try {
-      console.log("📋 [loadServers] Fetching proxy list...");
-      const proxyList = await fetchProxyList();
-      console.log("📊 [loadServers] Proxy list fetched, updating store...");
-      setServers(proxyList);
+      console.log("📋 [loadServers] Fetching healthy proxy list from external API...");
+      const healthyProxies = await fetchHealthyProxyList();
+      console.log("📊 [loadServers] Healthy proxy list fetched, updating store...");
+      setServers(healthyProxies);
 
-      console.log("🌍 [loadServers] Starting location data fetch...");
-      const serversWithLocations = await fetchLocationData(proxyList);
-      console.log("✅ [loadServers] Updating store with location data...");
-      setServers(serversWithLocations);
-
-      console.log("🏁 [loadServers] Server loading process complete, starting ping checks...");
-      // Start ping checks after location data is loaded and servers are displayed
-      checkServerPings(serversWithLocations);
+      console.log("🏁 [loadServers] Server loading process complete, starting latency testing...");
+      // Start latency testing after servers are displayed
+      checkServerLatency(healthyProxies);
     } catch (err) {
-      const errorMessage = "Failed to load proxy servers";
+      const errorMessage = "Failed to load healthy proxy servers from external API";
       console.error("💥 [loadServers] Server loading failed:", err);
       setError(errorMessage);
     } finally {
@@ -454,7 +288,8 @@ export function ServerList({ onSelect, currentServer }: ServerListProps) {
     const totalServers = servers.length;
     const healthyServers = servers.filter((server) => server.ping !== null);
     const discardedServers = servers.filter((server) => server.ping === null);
-    const serversWithLocation = servers.filter((server) => server.country !== "N/A" && server.country !== "Unknown");
+    // Since all servers from external API have valid location data, we don't need to filter by N/A
+    const serversWithLocation = servers.length; // All servers have location data from the API
     const averagePing =
       healthyServers.length > 0
         ? Math.round(healthyServers.reduce((sum, server) => sum + (server.ping || 0), 0) / healthyServers.length)
@@ -464,8 +299,8 @@ export function ServerList({ onSelect, currentServer }: ServerListProps) {
       total: totalServers,
       healthy: healthyServers.length,
       discarded: discardedServers.length,
-      withLocation: serversWithLocation.length,
-      locationSuccessRate: totalServers > 0 ? Math.round((serversWithLocation.length / totalServers) * 100) : 0,
+      withLocation: serversWithLocation,
+      locationSuccessRate: 100, // Always 100% since external API provides location data
       healthyRate: totalServers > 0 ? Math.round((healthyServers.length / totalServers) * 100) : 0,
       averagePing,
     };
@@ -527,9 +362,9 @@ export function ServerList({ onSelect, currentServer }: ServerListProps) {
           >
             <div className="flex items-center justify-between">
               <div>
-                <p className="text-red-600 text-xs font-medium uppercase tracking-wide">Discarded</p>
+                <p className="text-red-600 text-xs font-medium uppercase tracking-wide">No Ping Data</p>
                 <p className="text-2xl font-bold text-red-800">{statistics.discarded}</p>
-                <p className="text-xs text-red-600">Unhealthy/Failed</p>
+                <p className="text-xs text-red-600">Failed latency test</p>
               </div>
               <FiX className="w-6 h-6 text-red-500" />
             </div>
@@ -583,20 +418,12 @@ export function ServerList({ onSelect, currentServer }: ServerListProps) {
         </div>
       )}
 
-      {/* Loading locations state */}
-      {!isLoading && isLoadingLocations && (
-        <div className="flex items-center justify-center py-4 bg-blue-50 rounded-lg">
-          <FiRefreshCw className="w-4 h-4 animate-spin text-blue-600 mr-2" />
-          <span className="text-blue-600 text-sm">Fetching server locations...</span>
-        </div>
-      )}
-
       {/* Loading ping state */}
-      {!isLoading && !isLoadingLocations && isLoadingPing && (
+      {!isLoading && isLoadingPing && (
         <div className="flex items-center justify-center py-4 bg-green-50 rounded-lg">
           <FiRefreshCw className="w-4 h-4 animate-spin text-green-600 mr-2" />
           <div className="flex flex-col items-center">
-            <span className="text-green-600 text-sm">Testing proxy server health...</span>
+            <span className="text-green-600 text-sm">Testing proxy server latency...</span>
             <div className="text-green-500 text-xs mt-1">
               {`${pingProgress.completed}/${pingProgress.total} servers tested`}
             </div>
