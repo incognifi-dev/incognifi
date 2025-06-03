@@ -111,9 +111,9 @@ export function ServerList({ onSelect, currentServer }: ServerListProps) {
 
   // Function to test proxy latency only (health is already verified by external server)
   const checkServerLatency = async (servers: Server[]) => {
-    console.log("🔍 [checkServerLatency] Starting latency testing for healthy proxies:", {
+    console.log("🔍 [checkServerLatency] Starting concurrent latency testing for healthy proxies:", {
       totalServers: servers.length,
-      batchSize: 1, // Test one by one as requested
+      concurrency: "All servers tested in parallel with axios",
     });
 
     // Since contextIsolation is false, we can access electron directly
@@ -125,79 +125,51 @@ export function ServerList({ onSelect, currentServer }: ServerListProps) {
 
       let completedCount = 0;
 
-      // Process servers one by one as requested
-      for (let i = 0; i < servers.length; i++) {
-        const server = servers[i];
-        console.log(
-          `🔄 [checkServerLatency] Testing latency ${i + 1}/${servers.length} for ${server.ip}:${server.port}`
-        );
+      // Test all servers concurrently with real-time progress tracking
+      const testPromises = servers.map(async (server) => {
+        console.log(`🔄 [checkServerLatency] Starting latency test for ${server.ip}:${server.port}`);
 
         try {
-          // Test the proxy server 3 times and calculate average latency
-          const testResults = [];
-          for (let attempt = 1; attempt <= 1; attempt++) {
-            console.log(`🔍 [checkServerLatency] Latency test ${attempt}/3 for ${server.ip}:${server.port}`);
+          const testResult = await ipcRenderer.invoke("test-proxy-server", {
+            ip: server.ip,
+            port: server.port,
+            type: server.type,
+          });
 
-            const testResult = await ipcRenderer.invoke("test-proxy-server", {
-              ip: server.ip,
-              port: server.port,
-              type: server.type,
-            });
+          // Update progress immediately when this test completes
+          completedCount++;
+          setPingProgress(completedCount, servers.length);
 
-            if (testResult.success) {
-              testResults.push(testResult.ping);
-              console.log(
-                `✅ [checkServerLatency] Test ${attempt}/3 successful for ${server.ip}: ${testResult.ping}ms`
-              );
-            } else {
-              console.warn(`❌ [checkServerLatency] Test ${attempt}/3 failed for ${server.ip}:`, testResult.error);
-            }
-
-            // Small delay between attempts (only for same server)
-            if (attempt < 3) {
-              await new Promise((resolve) => setTimeout(resolve, 100));
-            }
-          }
-
-          // Calculate average if we have at least one successful test
-          if (testResults.length > 0) {
-            const averagePing = Math.round(testResults.reduce((sum, ping) => sum + ping, 0) / testResults.length);
-
-            console.log(`✅ [checkServerLatency] Server ${server.ip} latency result:`, {
-              successfulTests: testResults.length,
-              measurements: testResults,
-              averagePing: averagePing,
-              discardedTests: 3 - testResults.length,
-            });
-
-            updateServerPing(server.id, averagePing);
+          if (testResult.success) {
+            console.log(`✅ [checkServerLatency] Test successful for ${server.ip}: ${testResult.ping}ms`);
+            updateServerPing(server.id, testResult.ping);
+            return { serverId: server.id, ping: testResult.ping, success: true };
           } else {
-            console.warn(
-              `❌ [checkServerLatency] All latency tests failed for ${server.ip} - keeping server but with no ping`
-            );
-            // Keep the server since it's healthy according to external server, just no ping data
+            console.warn(`❌ [checkServerLatency] Test failed for ${server.ip}:`, testResult.error);
             updateServerPing(server.id, null);
+            return { serverId: server.id, ping: null, success: false };
           }
         } catch (error) {
+          // Update progress even for failed tests
+          completedCount++;
+          setPingProgress(completedCount, servers.length);
+
           console.error(`💥 [checkServerLatency] Error testing latency for ${server.ip}:`, error);
           updateServerPing(server.id, null);
+          return { serverId: server.id, ping: null, success: false };
         }
+      });
 
-        completedCount++;
-        setPingProgress(completedCount, servers.length);
+      // Wait for all tests to complete
+      const results = await Promise.allSettled(testPromises);
 
-        console.log(`✅ [checkServerLatency] Completed ${completedCount}/${servers.length}`);
+      const successfulTests = results.filter((result) => result.status === "fulfilled" && result.value.success).length;
 
-        // Small delay between servers to prevent overwhelming
-        if (i < servers.length - 1) {
-          console.log("⏳ [checkServerLatency] Waiting 200ms before next server...");
-          await new Promise((resolve) => setTimeout(resolve, 200));
-        }
-      }
-
-      console.log("🎉 [checkServerLatency] Latency testing completed:", {
+      console.log("🎉 [checkServerLatency] Concurrent latency testing completed:", {
         totalServers: servers.length,
-        serversWithPing: servers.filter((s) => s.ping !== null).length,
+        successfulTests,
+        failedTests: servers.length - successfulTests,
+        testingMethod: "All servers tested simultaneously with axios - much faster!",
       });
     } catch (error) {
       console.error("💥 [checkServerLatency] Fatal error during latency testing:", error);
