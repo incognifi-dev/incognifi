@@ -23,17 +23,109 @@ export function VPNDropdown({ isOpen, onClose }: VPNDropdownProps) {
 
   // Live latency monitoring state
   const [currentLatency, setCurrentLatency] = React.useState<number | null>(null);
-  const [latencyMeasurements, setLatencyMeasurements] = React.useState<number[]>([]);
   const [isCheckingLatency, setIsCheckingLatency] = React.useState(false);
-  const [latencyInterval, setLatencyInterval] = React.useState<NodeJS.Timeout | null>(null);
+
+  // Use useRef instead of useState for interval to avoid cleanup issues
+  const latencyIntervalRef = React.useRef<NodeJS.Timeout | null>(null);
+
+  // Memoize the latency checking function to prevent recreation on every render
+  const checkCurrentServerLatency = React.useCallback(async () => {
+    // Early return if dropdown is not open - no logic should run
+    if (!isOpen) {
+      return;
+    }
+
+    if (!vpnState.isConnected || vpnState.currentServer.type !== "oxylabs-residential") {
+      setCurrentLatency(null);
+      return;
+    }
+
+    setIsCheckingLatency(true);
+
+    try {
+      const startTime = Date.now();
+      const testResult = await ipcRenderer.invoke("test-proxy-connection");
+      const endTime = Date.now();
+      const totalTime = endTime - startTime;
+
+      if (testResult.success) {
+        // Use the current measurement directly - no need for averaging
+        setCurrentLatency(totalTime);
+      } else {
+        setCurrentLatency(999);
+      }
+    } catch (error) {
+      setCurrentLatency(999);
+    } finally {
+      setIsCheckingLatency(false);
+    }
+  }, [isOpen, vpnState.isConnected, vpnState.currentServer.type]);
+
+  // Start/stop live latency monitoring with proper cleanup
+  React.useEffect(() => {
+    // Clear any existing interval first
+    if (latencyIntervalRef.current) {
+      clearInterval(latencyIntervalRef.current);
+      latencyIntervalRef.current = null;
+    }
+
+    // Reset states when dropdown closes
+    if (!isOpen) {
+      setCurrentLatency(null);
+      setIsCheckingLatency(false);
+      return;
+    }
+
+    // Only run latency monitoring when dropdown is open AND connected
+    if (vpnState.isConnected && vpnState.currentServer.type === "oxylabs-residential") {
+      // Reset latency when dropdown opens
+      setCurrentLatency(null);
+
+      // Initial check immediately
+      checkCurrentServerLatency();
+
+      // Set up periodic checking every 30 seconds (reduced frequency to save CPU)
+      latencyIntervalRef.current = setInterval(checkCurrentServerLatency, 30000);
+    } else {
+      // Clear latency when disconnected
+      setCurrentLatency(null);
+    }
+
+    // Cleanup function
+    return () => {
+      if (latencyIntervalRef.current) {
+        clearInterval(latencyIntervalRef.current);
+        latencyIntervalRef.current = null;
+      }
+    };
+  }, [isOpen, vpnState.isConnected, vpnState.currentServer.type, checkCurrentServerLatency]);
 
   // Auto-open server list when dropdown first opens
   React.useEffect(() => {
-    if (isOpen && !hasAutoOpened) {
+    // Only run this logic when dropdown is open
+    if (!isOpen) {
+      return;
+    }
+
+    if (!hasAutoOpened) {
       setShowServerList(true);
       setHasAutoOpened(true);
     }
   }, [isOpen, hasAutoOpened]);
+
+  // Clear all states when dropdown closes
+  React.useEffect(() => {
+    if (!isOpen) {
+      // Reset all interactive states when closing
+      setCurrentLatency(null);
+      setIsCheckingLatency(false);
+      setMessage(null);
+      setIsLoading(false);
+
+      // Clear any pending message timeouts
+      // Note: Individual timeouts from setTimeout should be tracked with refs if we need to clear them
+    }
+  }, [isOpen]);
 
   const toggleConnection = async () => {
     if (vpnState.isConnected) {
@@ -151,94 +243,6 @@ export function VPNDropdown({ isOpen, onClose }: VPNDropdownProps) {
     }
   };
 
-  // Live latency monitoring function
-  const checkCurrentServerLatency = async () => {
-    if (!vpnState.isConnected || vpnState.currentServer.type !== "oxylabs-residential") {
-      setCurrentLatency(null);
-      return;
-    }
-
-    setIsCheckingLatency(true);
-
-    try {
-      const startTime = Date.now();
-      const testResult = await ipcRenderer.invoke("test-proxy-connection");
-      const endTime = Date.now();
-      const totalTime = endTime - startTime;
-
-      if (testResult.success) {
-        // Add the new measurement to our array
-        setLatencyMeasurements((prev) => {
-          const newMeasurements = [...prev, totalTime];
-          // Keep only the last 5 measurements for efficiency
-          const trimmedMeasurements = newMeasurements.slice(-5);
-
-          // Calculate average of all measurements
-          const average = Math.round(
-            trimmedMeasurements.reduce((sum, val) => sum + val, 0) / trimmedMeasurements.length
-          );
-
-          // Update the current latency with the average
-          setCurrentLatency(average);
-
-          return trimmedMeasurements;
-        });
-      } else {
-        if (latencyMeasurements.length === 0) {
-          setCurrentLatency(999);
-        }
-      }
-    } catch (error) {
-      if (latencyMeasurements.length === 0) {
-        setCurrentLatency(999);
-      }
-    } finally {
-      setIsCheckingLatency(false);
-    }
-  };
-
-  // Start/stop live latency monitoring
-  React.useEffect(() => {
-    if (vpnState.isConnected && isOpen && vpnState.currentServer.type === "oxylabs-residential") {
-      // Reset measurements and latency when dropdown opens
-      setLatencyMeasurements([]);
-      setCurrentLatency(null);
-
-      // Initial check immediately
-      checkCurrentServerLatency();
-
-      // Set up periodic checking every 15 seconds
-      const interval = setInterval(() => {
-        checkCurrentServerLatency();
-      }, 15000);
-
-      setLatencyInterval(interval);
-
-      return () => {
-        if (interval) {
-          clearInterval(interval);
-        }
-      };
-    } else {
-      // Clear interval and reset measurements when disconnected or dropdown closed
-      if (latencyInterval) {
-        clearInterval(latencyInterval);
-        setLatencyInterval(null);
-      }
-      setLatencyMeasurements([]);
-      setCurrentLatency(null);
-    }
-  }, [vpnState.isConnected, isOpen, vpnState.currentServer.type]);
-
-  // Cleanup interval on unmount
-  React.useEffect(() => {
-    return () => {
-      if (latencyInterval) {
-        clearInterval(latencyInterval);
-      }
-    };
-  }, [latencyInterval]);
-
   const getLatencyColor = (latency: number | null) => {
     if (latency === null) return "text-gray-400";
     if (latency >= 999 && latency < 1000) return "text-gray-500";
@@ -305,14 +309,8 @@ export function VPNDropdown({ isOpen, onClose }: VPNDropdownProps) {
               <div className="flex items-center justify-between">
                 <h3 className="text-white font-medium">VPN Connection</h3>
                 <div className="flex items-center space-x-2">
-                  <motion.div
-                    animate={{
-                      scale: vpnState.isConnected ? [1, 1.2, 1] : 1,
-                    }}
-                    transition={{ repeat: Infinity, duration: 2 }}
-                  >
-                    <FiActivity className={`w-5 h-5 ${vpnState.isConnected ? "text-green-400" : "text-red-400"}`} />
-                  </motion.div>
+                  {/* Simplified activity indicator - only animate when checking latency */}
+                  <FiActivity className={`w-5 h-5 ${vpnState.isConnected ? "text-green-400" : "text-red-400"}`} />
                   <button
                     onClick={onClose}
                     className="p-1 hover:bg-white/20 rounded-full transition-colors"
@@ -378,16 +376,8 @@ export function VPNDropdown({ isOpen, onClose }: VPNDropdownProps) {
                                 <FiRefreshCw className="w-4 h-4 text-violet-600" />
                               </motion.div>
                             ) : (
-                              <motion.div
-                                animate={{
-                                  scale: currentLatency !== null ? [1, 1.2, 1] : 1,
-                                  opacity: currentLatency !== null ? [0.5, 1, 0.5] : 1,
-                                }}
-                                transition={{
-                                  duration: 2,
-                                  repeat: Infinity,
-                                  ease: "easeInOut",
-                                }}
+                              // Static dot instead of infinitely animating one
+                              <div
                                 style={{
                                   width: "12px",
                                   height: "12px",

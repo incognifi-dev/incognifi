@@ -52,7 +52,7 @@ export function NetworkStats({ className = "" }: NetworkStatsProps) {
     // Start monitoring only if visible
     if (isVisible) {
       getNetworkStats();
-      intervalId = setInterval(getNetworkStats, 3000); // Update every 3 seconds (reduced from 1 second)
+      intervalId = setInterval(getNetworkStats, 10000); // Update every 10 seconds (reduced frequency for better performance)
     }
 
     return () => {

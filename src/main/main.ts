@@ -84,10 +84,17 @@ class AppState {
 // Network monitoring utilities
 class NetworkMonitor {
   private state = AppState.getInstance();
+  private interfaceCache: any = null;
+  private lastInterfaceUpdate = 0;
+  private readonly INTERFACE_CACHE_DURATION = 30000; // Cache interfaces for 30 seconds
 
   public async initialize(): Promise<void> {
     try {
       const [networkStats, networkInterfaces] = await Promise.all([si.networkStats(), si.networkInterfaces()]);
+
+      // Cache the network interfaces
+      this.interfaceCache = networkInterfaces;
+      this.lastInterfaceUpdate = Date.now();
 
       const primaryInterface = this.findPrimaryInterface(networkInterfaces);
       const primaryStats = networkStats.find((stat) => stat.iface === primaryInterface?.iface) || networkStats[0];
@@ -131,7 +138,19 @@ class NetworkMonitor {
     };
 
     try {
-      const [networkStats, networkInterfaces] = await Promise.all([si.networkStats(), si.networkInterfaces()]);
+      // Only get network interfaces if cache is stale or missing
+      let networkInterfaces = this.interfaceCache;
+      const now = Date.now();
+
+      if (!networkInterfaces || now - this.lastInterfaceUpdate > this.INTERFACE_CACHE_DURATION) {
+        // Cache is stale, refresh it
+        [networkInterfaces] = await Promise.all([si.networkInterfaces()]);
+        this.interfaceCache = networkInterfaces;
+        this.lastInterfaceUpdate = now;
+      }
+
+      // Always get fresh network stats (these are lightweight and change frequently)
+      const [networkStats] = await Promise.all([si.networkStats()]);
 
       const primaryInterface = this.findPrimaryInterface(networkInterfaces);
       const primaryStats = networkStats.find((stat) => stat.iface === primaryInterface?.iface) || networkStats[0];
@@ -197,8 +216,8 @@ class ProxyManager {
   private state = AppState.getInstance();
 
   private getCredentials() {
-    const customerId = process.env.OXYLABS_CUSTOMER_ID;
-    const password = process.env.OXYLABS_PASSWORD;
+    const customerId = "***REMOVED***";
+    const password = "***REMOVED***";
 
     if (!customerId || !password) {
       const error = `Missing environment variables: ${!customerId ? "OXYLABS_CUSTOMER_ID" : ""} ${
