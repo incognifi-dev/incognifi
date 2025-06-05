@@ -44,23 +44,23 @@ export function ServerList({ onSelect }: ServerListProps) {
   const [message, setMessage] = useState<{ type: "success" | "error"; text: string } | null>(null);
   const [isTestingConnection, setIsTestingConnection] = useState(false);
 
-  // Load saved Oxylabs configuration
+  // Load saved proxy configuration
   useEffect(() => {
-    loadOxylabsConfig();
+    loadProxyConfig();
   }, []);
 
-  const loadOxylabsConfig = async () => {
+  const loadProxyConfig = async () => {
     try {
       const config = await ipcRenderer.invoke("get-oxylabs-config");
       if (config) {
         setOxylabsConfig(config);
       }
     } catch (error) {
-      console.error("Failed to load Oxylabs config:", error);
+      console.error("Failed to load proxy config:", error);
     }
   };
 
-  const saveOxylabsConfig = async () => {
+  const saveProxyConfig = async () => {
     setIsLoading(true);
     setMessage(null);
 
@@ -68,13 +68,13 @@ export function ServerList({ onSelect }: ServerListProps) {
       const result = await ipcRenderer.invoke("save-oxylabs-config", oxylabsConfig);
 
       if (result.success) {
-        setMessage({ type: "success", text: result.message || "Oxylabs configuration saved successfully" });
+        setMessage({ type: "success", text: result.message || "Proxy configuration saved successfully" });
 
         // Refresh the current tab to use the new proxy immediately
         await ipcRenderer.invoke("refresh-current-tab");
 
         // Create a server object for the parent component
-        const oxylabsServer = {
+        const residentialServer = {
           id: "oxylabs-residential",
           country: COMMON_COUNTRIES.find((c) => c.code === oxylabsConfig.countryCode)?.name || "Unknown",
           countryCode: oxylabsConfig.countryCode,
@@ -88,19 +88,19 @@ export function ServerList({ onSelect }: ServerListProps) {
           oxylabsConfig,
         };
 
-        onSelect(oxylabsServer);
+        onSelect(residentialServer);
       } else {
         setMessage({ type: "error", text: result.message || "Failed to save configuration" });
       }
     } catch (error) {
-      setMessage({ type: "error", text: "Failed to save Oxylabs configuration" });
+      setMessage({ type: "error", text: "Failed to save proxy configuration" });
     } finally {
       setIsLoading(false);
       setTimeout(() => setMessage(null), 3000); // Back to normal timeout
     }
   };
 
-  const testOxylabsConnection = async () => {
+  const testProxyConnection = async () => {
     setIsTestingConnection(true);
     setMessage(null);
 
@@ -142,7 +142,7 @@ export function ServerList({ onSelect }: ServerListProps) {
       if (!currentConfig || !currentConfig.customerId || !currentConfig.password) {
         setMessage({
           type: "error",
-          text: "Please configure your Oxylabs credentials first using the form below",
+          text: "Please configure your proxy credentials first using the form below",
         });
         return;
       }
@@ -166,7 +166,7 @@ export function ServerList({ onSelect }: ServerListProps) {
         });
 
         // Create server object and notify parent
-        const oxylabsServer = {
+        const residentialServer = {
           id: "oxylabs-residential",
           country: country.name,
           countryCode: countryCode,
@@ -180,7 +180,7 @@ export function ServerList({ onSelect }: ServerListProps) {
           oxylabsConfig: newConfig,
         };
 
-        onSelect(oxylabsServer);
+        onSelect(residentialServer);
       } else {
         setMessage({ type: "error", text: result.message || "Failed to switch server" });
       }
@@ -193,7 +193,7 @@ export function ServerList({ onSelect }: ServerListProps) {
   };
 
   return (
-    <div className="p-6 space-y-6">
+    <div className="space-y-6 p-4">
       {/* Header */}
       <div className="text-center">
         <motion.div
@@ -203,7 +203,7 @@ export function ServerList({ onSelect }: ServerListProps) {
         >
           <div className="flex items-center justify-center mb-2">
             <FiShield className="w-6 h-6 text-indigo-600 mr-2" />
-            <h2 className="text-xl font-bold text-indigo-800">Oxylabs Residential Proxies</h2>
+            <h2 className="text-xl font-bold text-indigo-800">Residential Proxies</h2>
           </div>
           <p className="text-sm text-indigo-600">
             Premium residential proxy network with global coverage and high success rates
@@ -247,86 +247,6 @@ export function ServerList({ onSelect }: ServerListProps) {
             </motion.button>
           ))}
         </div>
-      </motion.div>
-
-      {/* Configuration Form */}
-      <motion.div
-        initial={{ opacity: 0, y: 20 }}
-        animate={{ opacity: 1, y: 0 }}
-        transition={{ delay: 0.2 }}
-        className="bg-white rounded-lg border border-gray-200 p-6 space-y-4"
-      >
-        <h3 className="text-lg font-semibold text-gray-800 flex items-center">
-          <FiSettings className="w-5 h-5 mr-2" />
-          Advanced Configuration
-        </h3>
-
-        {/* Customer ID */}
-        <div>
-          <label className="block text-sm font-medium text-gray-700 mb-2">Customer ID</label>
-          <input
-            type="text"
-            value={oxylabsConfig.customerId}
-            onChange={(e) => updateConfig({ customerId: e.target.value })}
-            placeholder="e.g., icognifi_DNMju"
-            className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-indigo-500 focus:border-transparent"
-          />
-        </div>
-
-        {/* Password */}
-        <div>
-          <label className="block text-sm font-medium text-gray-700 mb-2">Password</label>
-          <div className="relative">
-            <input
-              type={showPassword ? "text" : "password"}
-              value={oxylabsConfig.password}
-              onChange={(e) => updateConfig({ password: e.target.value })}
-              placeholder="Your Oxylabs password"
-              className="w-full px-3 py-2 pr-10 border border-gray-300 rounded-lg focus:ring-2 focus:ring-indigo-500 focus:border-transparent"
-            />
-            <button
-              type="button"
-              onClick={() => setShowPassword(!showPassword)}
-              className="absolute right-3 top-1/2 transform -translate-y-1/2 text-gray-400 hover:text-gray-600"
-            >
-              {showPassword ? <FiEyeOff className="w-4 h-4" /> : <FiEye className="w-4 h-4" />}
-            </button>
-          </div>
-        </div>
-
-        {/* Country Selection */}
-        <div>
-          <label className="block text-sm font-medium text-gray-700 mb-2">Target Country</label>
-          <select
-            value={oxylabsConfig.countryCode}
-            onChange={(e) => updateConfig({ countryCode: e.target.value })}
-            className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-indigo-500 focus:border-transparent"
-          >
-            {COMMON_COUNTRIES.map((country) => (
-              <option
-                key={country.code}
-                value={country.code}
-              >
-                {country.flag} {country.name} ({country.code})
-              </option>
-            ))}
-          </select>
-        </div>
-
-        {/* Session ID (Optional) */}
-        <div>
-          <label className="block text-sm font-medium text-gray-700 mb-2">
-            Session ID (Optional)
-            <span className="text-xs text-gray-500 ml-1">- for sticky sessions</span>
-          </label>
-          <input
-            type="text"
-            value={oxylabsConfig.sessionId || ""}
-            onChange={(e) => updateConfig({ sessionId: e.target.value })}
-            placeholder="Leave empty for rotating IPs"
-            className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-indigo-500 focus:border-transparent"
-          />
-        </div>
 
         {/* Message Display */}
         <AnimatePresence>
@@ -335,7 +255,7 @@ export function ServerList({ onSelect }: ServerListProps) {
               initial={{ opacity: 0, y: -10 }}
               animate={{ opacity: 1, y: 0 }}
               exit={{ opacity: 0, y: -10 }}
-              className={`p-3 rounded-lg ${
+              className={`mt-4 p-3 rounded-lg ${
                 message.type === "success"
                   ? "bg-green-50 text-green-700 border border-green-200"
                   : "bg-red-50 text-red-700 border border-red-200"
@@ -352,46 +272,13 @@ export function ServerList({ onSelect }: ServerListProps) {
             </motion.div>
           )}
         </AnimatePresence>
-
-        {/* Action Buttons */}
-        <div className="flex gap-3 pt-4">
-          <button
-            onClick={saveOxylabsConfig}
-            disabled={isLoading || !oxylabsConfig.customerId || !oxylabsConfig.password}
-            className="flex-1 bg-indigo-600 hover:bg-indigo-700 text-white px-4 py-2 rounded-lg font-medium transition-colors disabled:opacity-50 disabled:cursor-not-allowed flex items-center justify-center"
-          >
-            {isLoading ? (
-              <FiRefreshCw className="w-4 h-4 animate-spin" />
-            ) : (
-              <>
-                <FiCheck className="w-4 h-4 mr-2" />
-                Save & Connect
-              </>
-            )}
-          </button>
-
-          <button
-            onClick={testOxylabsConnection}
-            disabled={isTestingConnection || !oxylabsConfig.customerId || !oxylabsConfig.password}
-            className="px-4 py-2 border border-gray-300 text-gray-700 rounded-lg font-medium hover:bg-gray-50 transition-colors disabled:opacity-50 disabled:cursor-not-allowed flex items-center justify-center"
-          >
-            {isTestingConnection ? (
-              <FiRefreshCw className="w-4 h-4 animate-spin" />
-            ) : (
-              <>
-                <FiGlobe className="w-4 h-4 mr-2" />
-                Test Connection
-              </>
-            )}
-          </button>
-        </div>
       </motion.div>
 
       {/* Information Section */}
       <motion.div
         initial={{ opacity: 0, y: 20 }}
         animate={{ opacity: 1, y: 0 }}
-        transition={{ delay: 0.3 }}
+        transition={{ delay: 0.2 }}
         className="bg-gradient-to-r from-blue-50 to-indigo-50 rounded-lg p-4 border border-blue-200"
       >
         <div className="space-y-3">
@@ -412,7 +299,7 @@ export function ServerList({ onSelect }: ServerListProps) {
               <div>
                 <h4 className="text-sm font-semibold text-blue-800 mb-1">How It Works</h4>
                 <p className="text-xs text-blue-700 leading-relaxed">
-                  Your traffic will be routed through Oxylabs' residential proxy network (pr.oxylabs.io:7777) using your
+                  Your traffic will be routed through the residential proxy network (pr.oxylabs.io:7777) using your
                   selected country targeting.
                 </p>
               </div>
