@@ -4,11 +4,19 @@ import fs from "fs";
 import si from "systeminformation";
 import axios from "axios";
 
+// Load environment variables
+import dotenv from "dotenv";
+dotenv.config();
+
+// Debug: Check if environment variables are loaded
+console.log("Environment variables loaded:", {
+  hasCustomerId: !!process.env.OXYLABS_CUSTOMER_ID,
+  hasPassword: !!process.env.OXYLABS_PASSWORD,
+  nodeEnv: process.env.NODE_ENV,
+});
+
 // Constants
 const APP_NAME = "IcogniFi";
-const OXYLABS_HOST = "pr.oxylabs.io";
-const OXYLABS_PORT = 7777;
-const OXYLABS_API_URL = "https://ip.oxylabs.io/location";
 const CONNECTION_TIMEOUT = 15000;
 const WINDOW_CONFIG = {
   width: 1200,
@@ -41,20 +49,10 @@ interface NetworkStatistics {
   isConnected: boolean;
 }
 
-interface ProxyConfig {
-  enabled: boolean;
-  host: string;
+interface ProxyServer {
+  endpoint: string;
   port: number;
-  username?: string;
-  password?: string;
-  type: "socks5" | "socks4" | "http";
-}
-
-interface OxylabsConfig {
-  customerId: string;
-  password: string;
   countryCode: string;
-  sessionId?: string;
 }
 
 interface ProxyTestResult {
@@ -71,77 +69,15 @@ class AppState {
   public networkBaseline: NetworkBaseline | null = null;
   public lastNetworkStats: NetworkStats | null = null;
   public sessionStartTime: number = 0;
-  public currentProxyConfig: ProxyConfig;
+  public currentProxyServer: ProxyServer | null = null;
 
-  private constructor() {
-    this.currentProxyConfig = this.loadProxyConfig();
-  }
+  private constructor() {}
 
   public static getInstance(): AppState {
     if (!AppState.instance) {
       AppState.instance = new AppState();
     }
     return AppState.instance;
-  }
-
-  private loadProxyConfig(): ProxyConfig {
-    const defaultConfig: ProxyConfig = {
-      enabled: false,
-      host: OXYLABS_HOST,
-      port: OXYLABS_PORT,
-      type: "http",
-    };
-
-    try {
-      const configPath = this.getConfigPath("proxy-config.json");
-      if (fs.existsSync(configPath)) {
-        const data = fs.readFileSync(configPath, "utf8");
-        return { ...defaultConfig, ...JSON.parse(data) };
-      }
-    } catch (error) {
-      console.error("Failed to load proxy config:", error);
-    }
-    return defaultConfig;
-  }
-
-  private getConfigPath(filename: string): string {
-    return path.join(app.getPath("userData"), filename);
-  }
-
-  public loadOxylabsConfig(): OxylabsConfig | null {
-    try {
-      const configPath = this.getConfigPath("oxylabs-config.json");
-      if (fs.existsSync(configPath)) {
-        const data = fs.readFileSync(configPath, "utf8");
-        return JSON.parse(data);
-      }
-    } catch (error) {
-      console.error("Failed to load Oxylabs config:", error);
-    }
-    return null;
-  }
-
-  public saveOxylabsConfig(config: OxylabsConfig): void {
-    try {
-      const configPath = this.getConfigPath("oxylabs-config.json");
-      fs.writeFileSync(configPath, JSON.stringify(config, null, 2));
-      console.log("Oxylabs config saved:", { ...config, password: "***" });
-    } catch (error) {
-      console.error("Failed to save Oxylabs config:", error);
-      throw error;
-    }
-  }
-
-  public saveProxyConfig(config: ProxyConfig): void {
-    try {
-      const configPath = this.getConfigPath("proxy-config.json");
-      fs.writeFileSync(configPath, JSON.stringify(config, null, 2));
-      this.currentProxyConfig = { ...config };
-      console.log("Proxy config saved:", { ...config, password: config.password ? "***" : undefined });
-    } catch (error) {
-      console.error("Failed to save proxy config:", error);
-      throw error;
-    }
   }
 }
 
@@ -260,98 +196,121 @@ class NetworkMonitor {
 class ProxyManager {
   private state = AppState.getInstance();
 
-  public buildOxylabsUsername(config: OxylabsConfig): string {
-    let username = `customer-${config.customerId}-cc-${config.countryCode}`;
-    if (config.sessionId?.trim()) {
-      username += `-session-${config.sessionId}`;
+  private getCredentials() {
+    const customerId = process.env.OXYLABS_CUSTOMER_ID;
+    const password = process.env.OXYLABS_PASSWORD;
+
+    if (!customerId || !password) {
+      const error = `Missing environment variables: ${!customerId ? "OXYLABS_CUSTOMER_ID" : ""} ${
+        !password ? "OXYLABS_PASSWORD" : ""
+      }`;
+      console.error(error);
+      throw new Error(error);
     }
-    return username;
+
+    return { customerId, password };
   }
 
-  public async updateWebviewProxy(config: ProxyConfig): Promise<ProxyTestResult> {
+  private buildUsername(countryCode: string): string {
+    const { customerId } = this.getCredentials();
+    return `customer-${customerId}-cc-${countryCode}`;
+  }
+
+  public async setProxy(server: ProxyServer): Promise<ProxyTestResult> {
+    console.log("Setting proxy server:", {
+      endpoint: server.endpoint,
+      port: server.port,
+      countryCode: server.countryCode,
+    });
     const webviewSession = session.fromPartition("persist:webview");
 
     try {
-      if (config.enabled && config.username && config.password) {
-        return await this.enableProxy(webviewSession, config);
-      } else {
-        return await this.disableProxy(webviewSession);
-      }
+      const { password } = this.getCredentials();
+      const username = this.buildUsername(server.countryCode);
+
+      // Clear authentication and resolver caches
+      await Promise.all([
+        webviewSession.clearAuthCache(),
+        webviewSession.clearHostResolverCache(),
+        webviewSession.clearCache(),
+      ]);
+
+      const proxyRules = `http=${server.endpoint}:${server.port};https=${server.endpoint}:${server.port}`;
+
+      await webviewSession.setProxy({
+        proxyRules,
+        proxyBypassRules: "localhost,127.0.0.1,::1,<local>",
+      });
+
+      // Set up authentication
+      app.removeAllListeners("login");
+      app.on("login", (event, _webContents, _request, authInfo, callback) => {
+        if (authInfo.isProxy) {
+          event.preventDefault();
+          callback(username, password);
+        }
+      });
+
+      this.state.currentProxyServer = server;
+
+      console.log("Proxy set successfully");
+      return {
+        success: true,
+        message: `Proxy enabled: ${server.endpoint}:${server.port} (${server.countryCode})`,
+      };
+    } catch (error) {
+      console.error("Failed to set proxy:", error);
+      const message = error instanceof Error ? error.message : String(error);
+      return { success: false, message: `Failed to set proxy: ${message}` };
+    }
+  }
+
+  public async disableProxy(): Promise<ProxyTestResult> {
+    const webviewSession = session.fromPartition("persist:webview");
+
+    try {
+      await Promise.all([
+        webviewSession.clearAuthCache(),
+        webviewSession.clearHostResolverCache(),
+        webviewSession.clearCache(),
+      ]);
+
+      await webviewSession.setProxy({ proxyRules: "direct://" });
+
+      // Remove auth handler
+      app.removeAllListeners("login");
+
+      this.state.currentProxyServer = null;
+
+      return { success: true, message: "Proxy disabled" };
     } catch (error) {
       const message = error instanceof Error ? error.message : String(error);
-      return { success: false, message: `Failed to update proxy: ${message}` };
+      return { success: false, message: `Failed to disable proxy: ${message}` };
     }
   }
 
-  private async enableProxy(webviewSession: Electron.Session, config: ProxyConfig): Promise<ProxyTestResult> {
-    // Clear authentication cache
-    await Promise.all([webviewSession.clearAuthCache(), webviewSession.clearHostResolverCache()]);
+  public async testConnection(server?: ProxyServer): Promise<ProxyTestResult> {
+    const testServer = server || this.state.currentProxyServer;
 
-    const proxyRules = `http=${config.host}:${config.port};https=${config.host}:${config.port}`;
-
-    await webviewSession.setProxy({
-      proxyRules,
-      proxyBypassRules: "localhost,127.0.0.1,::1,<local>",
-    });
-
-    // Clear cache to ensure new credentials are used
-    await webviewSession.clearCache();
-
-    return { success: true, message: `Proxy enabled: ${config.host}:${config.port}` };
-  }
-
-  private async disableProxy(webviewSession: Electron.Session): Promise<ProxyTestResult> {
-    await Promise.all([webviewSession.clearAuthCache(), webviewSession.clearHostResolverCache()]);
-
-    await webviewSession.setProxy({ proxyRules: "direct://" });
-
-    return { success: true, message: "Proxy disabled" };
-  }
-
-  public initializeAppProxy(): void {
-    const savedOxylabsConfig = this.state.loadOxylabsConfig();
-
-    if (!savedOxylabsConfig) {
-      return;
-    }
-
-    const username = this.buildOxylabsUsername(savedOxylabsConfig);
-    const proxyUrl = `http://${OXYLABS_HOST}:${OXYLABS_PORT}`;
-    const proxyConfig = `http=${proxyUrl};https=${proxyUrl}`;
-
-    app.commandLine.appendSwitch("proxy-server", proxyConfig);
-
-    // Update current proxy config
-    this.state.currentProxyConfig = {
-      enabled: true,
-      host: OXYLABS_HOST,
-      port: OXYLABS_PORT,
-      type: "http",
-      username,
-      password: savedOxylabsConfig.password,
-    };
-  }
-
-  public async testConnection(config?: OxylabsConfig): Promise<ProxyTestResult> {
-    const testConfig = config || this.state.loadOxylabsConfig();
-
-    if (!testConfig) {
-      return { success: false, message: "No proxy configuration found" };
+    if (!testServer) {
+      return { success: false, message: "No proxy server configured" };
     }
 
     try {
-      const username = this.buildOxylabsUsername(testConfig);
+      const { password } = this.getCredentials();
+      const username = this.buildUsername(testServer.countryCode);
+
       const axiosConfig = {
         timeout: CONNECTION_TIMEOUT,
         proxy: {
           protocol: "http" as const,
-          host: OXYLABS_HOST,
-          port: OXYLABS_PORT,
-          auth: { username, password: testConfig.password },
+          host: testServer.endpoint,
+          port: testServer.port,
+          auth: { username, password },
         },
       };
 
-      const response = await axios.get(OXYLABS_API_URL, axiosConfig);
+      const response = await axios.get("https://ip.oxylabs.io/location", axiosConfig);
 
       if (response.status === 200 && response.data) {
         return {
@@ -382,7 +341,7 @@ class ProxyManager {
 
       switch (code) {
         case "ECONNREFUSED":
-          return { success: false, message: "Connection refused - unable to reach Oxylabs proxy server" };
+          return { success: false, message: "Connection refused - unable to reach proxy server" };
         case "ETIMEDOUT":
           return { success: false, message: "Connection timeout - please try again" };
       }
@@ -394,20 +353,7 @@ class ProxyManager {
 }
 
 // Application setup
-function setupAuthenticationHandler(): void {
-  app.on("login", (event, _webContents, _request, authInfo, callback) => {
-    const { currentProxyConfig } = AppState.getInstance();
-
-    if (authInfo.isProxy && currentProxyConfig.enabled && currentProxyConfig.username && currentProxyConfig.password) {
-      event.preventDefault();
-      callback(currentProxyConfig.username, currentProxyConfig.password);
-    }
-  });
-}
-
 function setupIpcHandlers(mainWindow: BrowserWindow, networkMonitor: NetworkMonitor, proxyManager: ProxyManager): void {
-  const state = AppState.getInstance();
-
   // Storage management
   ipcMain.handle("clear-storage", async () => {
     const { response } = await dialog.showMessageBox(mainWindow, {
@@ -430,70 +376,21 @@ function setupIpcHandlers(mainWindow: BrowserWindow, networkMonitor: NetworkMoni
   // Network monitoring
   ipcMain.handle("get-network-stats", () => networkMonitor.getStats());
 
-  // Oxylabs configuration
-  ipcMain.handle("get-oxylabs-config", () => state.loadOxylabsConfig());
-
-  ipcMain.handle("save-oxylabs-config", async (_event, config: OxylabsConfig) => {
+  // Proxy management
+  ipcMain.handle("set-proxy-server", async (_event, server: ProxyServer) => {
+    console.log("IPC: set-proxy-server called with:", server);
     try {
-      state.saveOxylabsConfig(config);
-
-      const username = proxyManager.buildOxylabsUsername(config);
-
-      const newProxyConfig: ProxyConfig = {
-        enabled: true,
-        host: OXYLABS_HOST,
-        port: OXYLABS_PORT,
-        type: "http",
-        username,
-        password: config.password,
-      };
-
-      state.saveProxyConfig(newProxyConfig);
-
-      // Small delay to ensure auth handler has updated config
-      await new Promise((resolve) => setTimeout(resolve, 100));
-
-      const result = await proxyManager.updateWebviewProxy(newProxyConfig);
-
-      if (result.success) {
-        return {
-          success: true,
-          message: `Successfully switched to ${config.countryCode} - Oxylabs configuration saved and proxy updated!`,
-        };
-      } else {
-        return {
-          success: false,
-          message: `Configuration saved but failed to update proxy: ${result.message}`,
-        };
-      }
+      const result = await proxyManager.setProxy(server);
+      console.log("IPC: set-proxy-server result:", result);
+      return result;
     } catch (error) {
-      const message = error instanceof Error ? error.message : String(error);
-      return { success: false, message: `Failed to save Oxylabs configuration: ${message}` };
+      console.error("IPC: set-proxy-server error:", error);
+      return { success: false, message: `IPC error: ${error}` };
     }
   });
 
-  ipcMain.handle("test-oxylabs-connection", (_event, config: OxylabsConfig) => proxyManager.testConnection(config));
-
-  // Proxy management
-  ipcMain.handle("get-proxy-config", () => {
-    console.log("Getting proxy config:", {
-      ...state.currentProxyConfig,
-      password: state.currentProxyConfig.password ? "***" : undefined,
-    });
-    return state.currentProxyConfig;
-  });
-
-  ipcMain.handle("set-proxy-config", async (_event, config: ProxyConfig) => {
-    state.saveProxyConfig(config);
-    return await proxyManager.updateWebviewProxy(config);
-  });
-
-  ipcMain.handle("toggle-proxy", async () => {
-    const newConfig = { ...state.currentProxyConfig, enabled: !state.currentProxyConfig.enabled };
-    state.saveProxyConfig(newConfig);
-
-    const result = await proxyManager.updateWebviewProxy(newConfig);
-    return { ...result, enabled: newConfig.enabled };
+  ipcMain.handle("disable-proxy", async () => {
+    return await proxyManager.disableProxy();
   });
 
   ipcMain.handle("test-proxy-connection", () => proxyManager.testConnection());
@@ -515,12 +412,8 @@ function cleanupIpcHandlers(): void {
   const handlers = [
     "clear-storage",
     "get-network-stats",
-    "get-oxylabs-config",
-    "save-oxylabs-config",
-    "test-oxylabs-connection",
-    "get-proxy-config",
-    "set-proxy-config",
-    "toggle-proxy",
+    "set-proxy-server",
+    "disable-proxy",
     "test-proxy-connection",
     "refresh-current-tab",
   ];
@@ -557,7 +450,6 @@ function createWindow(): BrowserWindow {
   const proxyManager = new ProxyManager();
 
   // Setup handlers
-  setupAuthenticationHandler();
   setupIpcHandlers(mainWindow, networkMonitor, proxyManager);
 
   // Window event handlers
@@ -652,9 +544,6 @@ function loadErrorPage(mainWindow: BrowserWindow, htmlPath: string, fallbackPath
 }
 
 // Application lifecycle
-const proxyManager = new ProxyManager();
-proxyManager.initializeAppProxy();
-
 app.whenReady().then(async () => {
   createWindow();
   const networkMonitor = new NetworkMonitor();

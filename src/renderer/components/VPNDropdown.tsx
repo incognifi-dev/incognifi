@@ -12,15 +12,6 @@ interface VPNDropdownProps {
   onClose: () => void;
 }
 
-interface ProxyConfigType {
-  enabled: boolean;
-  host: string;
-  port: number;
-  type: "socks5" | "socks4" | "http";
-  username?: string;
-  password?: string;
-}
-
 export function VPNDropdown({ isOpen, onClose }: VPNDropdownProps) {
   // Use VPN store instead of local state
   const { vpnState, setCurrentServer, setConnectionStatus } = useVPNStore();
@@ -28,15 +19,7 @@ export function VPNDropdown({ isOpen, onClose }: VPNDropdownProps) {
   const [isLoading, setIsLoading] = React.useState(false);
   const [showServerList, setShowServerList] = React.useState(false);
   const [hasAutoOpened, setHasAutoOpened] = React.useState(false);
-
-  // Proxy configuration state
-  const [proxyConfig, setProxyConfig] = React.useState<ProxyConfigType>({
-    enabled: false,
-    host: "pr.oxylabs.io",
-    port: 7777,
-    type: "http",
-  });
-  const [proxyMessage, setProxyMessage] = React.useState<{ type: "success" | "error"; text: string } | null>(null);
+  const [message, setMessage] = React.useState<{ type: "success" | "error"; text: string } | null>(null);
 
   // Live latency monitoring state
   const [currentLatency, setCurrentLatency] = React.useState<number | null>(null);
@@ -54,72 +37,63 @@ export function VPNDropdown({ isOpen, onClose }: VPNDropdownProps) {
 
   const toggleConnection = async () => {
     if (vpnState.isConnected) {
-      // When disconnecting, disable the proxy as well
+      // Disconnect - disable proxy
       setIsLoading(true);
 
       try {
-        // Disable proxy first
-        const updatedProxyConfig = {
-          ...proxyConfig,
-          enabled: false,
-        };
-
-        setProxyConfig(updatedProxyConfig);
-
-        // Save the disabled proxy configuration
-        const result = await ipcRenderer.invoke("set-proxy-config", updatedProxyConfig);
+        const result = await ipcRenderer.invoke("disable-proxy");
 
         if (result.success) {
-          setProxyMessage({ type: "success", text: "Proxy disconnected" });
-          setTimeout(() => setProxyMessage(null), 3000);
+          setMessage({ type: "success", text: "Proxy disconnected" });
+          setTimeout(() => setMessage(null), 3000);
 
           // Refresh the current tab to use direct connection
           await ipcRenderer.invoke("refresh-current-tab");
+        } else {
+          setMessage({ type: "error", text: result.message || "Failed to disable proxy" });
         }
 
-        // Immediate disconnect
+        // Always disconnect VPN state even if proxy disable fails
         setConnectionStatus(false);
       } catch (error) {
-        setProxyMessage({ type: "error", text: "Failed to disable proxy" });
-        // Still disconnect VPN even if proxy disable fails
+        setMessage({ type: "error", text: "Failed to disable proxy" });
         setConnectionStatus(false);
       } finally {
         setIsLoading(false);
       }
     } else {
-      // When connecting, enable the proxy as well
+      // Connect - but we need a server selected first
+      if (!vpnState.currentServer.id) {
+        setMessage({ type: "error", text: "Please select a server first" });
+        setTimeout(() => setMessage(null), 3000);
+        return;
+      }
+
       setIsLoading(true);
 
       try {
-        // Enable proxy first
-        const updatedProxyConfig = {
-          ...proxyConfig,
-          enabled: true,
+        // Use the currently selected server
+        const serverConfig = {
+          endpoint: vpnState.currentServer.ip,
+          port: vpnState.currentServer.port,
+          countryCode: vpnState.currentServer.countryCode,
         };
 
-        setProxyConfig(updatedProxyConfig);
-
-        // Save the enabled proxy configuration
-        const result = await ipcRenderer.invoke("set-proxy-config", updatedProxyConfig);
+        const result = await ipcRenderer.invoke("set-proxy-server", serverConfig);
 
         if (result.success) {
-          setProxyMessage({ type: "success", text: "Proxy connected" });
-          setTimeout(() => setProxyMessage(null), 3000);
+          setMessage({ type: "success", text: "Proxy connected" });
+          setTimeout(() => setMessage(null), 3000);
 
           // Refresh the current tab to use proxy connection
           await ipcRenderer.invoke("refresh-current-tab");
+
+          setConnectionStatus(true);
+        } else {
+          setMessage({ type: "error", text: result.message || "Failed to enable proxy" });
         }
-
-        // Simulate connection delay
-        await new Promise((resolve) => setTimeout(resolve, 1500));
-
-        // Connect VPN
-        setConnectionStatus(true);
       } catch (error) {
-        setProxyMessage({ type: "error", text: "Failed to enable proxy" });
-        // Still connect VPN even if proxy enable fails
-        await new Promise((resolve) => setTimeout(resolve, 1500));
-        setConnectionStatus(true);
+        setMessage({ type: "error", text: "Failed to enable proxy" });
       } finally {
         setIsLoading(false);
       }
@@ -128,20 +102,20 @@ export function VPNDropdown({ isOpen, onClose }: VPNDropdownProps) {
 
   const handleServerSelect = async (server: any) => {
     setShowServerList(false);
+    setIsLoading(true);
 
-    // If it's a residential server configuration
-    if (server.type === "oxylabs-residential" && server.oxylabsConfig) {
-      setIsLoading(true);
+    try {
+      // Create server config for the main process
+      const serverConfig = {
+        endpoint: server.ip,
+        port: server.port,
+        countryCode: server.countryCode,
+      };
 
-      try {
-        // First, save the configuration to actually update the proxy settings
-        const saveResult = await ipcRenderer.invoke("save-oxylabs-config", server.oxylabsConfig);
+      // Set the proxy server
+      const result = await ipcRenderer.invoke("set-proxy-server", serverConfig);
 
-        if (!saveResult.success) {
-          setProxyMessage({ type: "error", text: `Failed to configure proxy: ${saveResult.message}` });
-          return;
-        }
-
+      if (result.success) {
         // Update VPN state with new server info
         setCurrentServer({
           id: server.id,
@@ -159,22 +133,21 @@ export function VPNDropdown({ isOpen, onClose }: VPNDropdownProps) {
         // Enable connection
         setConnectionStatus(true);
 
-        setProxyMessage({
+        setMessage({
           type: "success",
           text: `Successfully switched to ${server.country}`,
         });
-        setTimeout(() => setProxyMessage(null), 3000);
+        setTimeout(() => setMessage(null), 3000);
 
         // Refresh the current tab to use the new proxy
         await ipcRenderer.invoke("refresh-current-tab");
-
-        // Simulate server switch delay
-        await new Promise((resolve) => setTimeout(resolve, 1000));
-      } catch (error) {
-        setProxyMessage({ type: "error", text: "Failed to configure proxy" });
-      } finally {
-        setIsLoading(false);
+      } else {
+        setMessage({ type: "error", text: result.message || "Failed to configure proxy" });
       }
+    } catch (error) {
+      setMessage({ type: "error", text: "Failed to configure proxy" });
+    } finally {
+      setIsLoading(false);
     }
   };
 
@@ -234,7 +207,7 @@ export function VPNDropdown({ isOpen, onClose }: VPNDropdownProps) {
       // Initial check immediately
       checkCurrentServerLatency();
 
-      // Set up periodic checking every 15 seconds (reduced from 5 seconds)
+      // Set up periodic checking every 15 seconds
       const interval = setInterval(() => {
         checkCurrentServerLatency();
       }, 15000);
@@ -442,37 +415,29 @@ export function VPNDropdown({ isOpen, onClose }: VPNDropdownProps) {
                             {vpnState.currentServer.city}, {vpnState.currentServer.country}
                           </span>
                         </div>
-
-                        {/* Proxy Endpoint */}
-                        {/* <div className="flex items-center justify-between">
-                          <span className="text-gray-600">Proxy Endpoint</span>
-                          <span className="font-medium text-gray-800">
-                            {vpnState.currentServer.ip}:{vpnState.currentServer.port}
-                          </span>
-                        </div> */}
                       </div>
                     )}
 
                     {/* Message Display */}
                     <AnimatePresence>
-                      {proxyMessage && (
+                      {message && (
                         <motion.div
                           initial={{ opacity: 0, y: -10 }}
                           animate={{ opacity: 1, y: 0 }}
                           exit={{ opacity: 0, y: -10 }}
                           className={`mb-4 p-3 rounded-lg ${
-                            proxyMessage.type === "success"
+                            message.type === "success"
                               ? "bg-green-50 text-green-700 border border-green-200"
                               : "bg-red-50 text-red-700 border border-red-200"
                           }`}
                         >
                           <div className="flex items-center">
-                            {proxyMessage.type === "success" ? (
+                            {message.type === "success" ? (
                               <FiCheck className="w-4 h-4 mr-2" />
                             ) : (
                               <FiX className="w-4 h-4 mr-2" />
                             )}
-                            {proxyMessage.text}
+                            {message.text}
                           </div>
                         </motion.div>
                       )}

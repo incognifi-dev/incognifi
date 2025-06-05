@@ -782,7 +782,7 @@ export default function App() {
                     transition={{ duration: 0.5, delay: 0.3 }}
                     className="text-2xl font-semibold text-violet-900 mb-3"
                   >
-                    Welcome to IcogniFi - Hot Reload Test!
+                    Welcome to IcogniFi - Privacy Hub
                   </motion.h1>
                   <div className="w-full text-center space-y-4">
                     <motion.p
