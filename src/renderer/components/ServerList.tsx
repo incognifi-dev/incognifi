@@ -1,6 +1,8 @@
+/// <reference types="vite/client" />
+
 import { AnimatePresence, motion } from "framer-motion";
-import { useEffect, useState } from "react";
-import { FiCheck, FiMapPin, FiShield, FiGlobe } from "react-icons/fi";
+import { useState } from "react";
+import { FiCheck, FiGlobe, FiMapPin, FiShield } from "react-icons/fi";
 
 // Since contextIsolation is false, we can access electron directly
 const { ipcRenderer } = window.require("electron");
@@ -9,6 +11,16 @@ interface ServerListProps {
   onSelect: (server: any) => void;
 }
 
+// Import all flag images using Vite's glob import
+const flagModules = import.meta.glob("../flags/*.png", { eager: true, as: "url" });
+
+// Create a mapping of country codes to flag URLs
+const flagMap: Record<string, string> = {};
+Object.entries(flagModules).forEach(([path, url]) => {
+  const filename = path.split("/").pop()?.replace(".png", "") || "";
+  flagMap[filename.toUpperCase()] = url as string;
+});
+
 // Helper function to get flag image
 const getFlagImage = (countryCode: string): string => {
   // Handle special cases
@@ -16,14 +28,8 @@ const getFlagImage = (countryCode: string): string => {
     return "";
   }
 
-  try {
-    // Convert to lowercase for the file name
-    const flagCode = countryCode.toLowerCase();
-    return require(`../flags/${flagCode}.png`);
-  } catch (error) {
-    // Fallback if flag image doesn't exist
-    return "";
-  }
+  // Return the flag URL or empty string if not found
+  return flagMap[countryCode.toUpperCase()] || "";
 };
 
 // Comprehensive country list with Oxylabs server endpoints
