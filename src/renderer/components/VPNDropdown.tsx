@@ -465,12 +465,12 @@ export function VPNDropdown({ isOpen, onClose }: VPNDropdownProps) {
                         </div>
 
                         {/* Proxy Endpoint */}
-                        <div className="flex items-center justify-between">
+                        {/* <div className="flex items-center justify-between">
                           <span className="text-gray-600">Proxy Endpoint</span>
                           <span className="font-medium text-gray-800">
                             {vpnState.currentServer.ip}:{vpnState.currentServer.port}
                           </span>
-                        </div>
+                        </div> */}
                       </div>
                     )}
 
