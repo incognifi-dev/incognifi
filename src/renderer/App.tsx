@@ -1,26 +1,28 @@
 // Hot reload test - this should trigger a refresh
-import { useState, useRef, useEffect, createRef, useCallback } from "react";
-import type { WebviewTag } from "electron";
-import { NavigationBar } from "./components/NavigationBar";
-import { BookmarksBar } from "./components/BookmarksBar";
-import { TitleBar } from "./components/TitleBar";
-import { SocialBar } from "./components/SocialBar";
-import { HistoryPage } from "./components/HistoryPage";
-import { ErrorPage } from "./components/ErrorPage";
-import { Bookmark, Tab, HistoryEntry } from "./types";
-import { defaultBookmarks } from "./data/defaultBookmarks";
-import icognifiLogo from "./assets/icognifi-alpha.png";
-import { motion, AnimatePresence } from "framer-motion";
 import {
-  ShieldCheckIcon,
-  UserGroupIcon,
-  BookmarkIcon,
-  GlobeAltIcon,
-  LockClosedIcon,
+  ArrowsRightLeftIcon,
+  ChatBubbleLeftRightIcon,
   CogIcon,
+  GlobeAltIcon,
+  KeyIcon,
+  ShieldCheckIcon,
+  WalletIcon,
+  ClockIcon,
 } from "@heroicons/react/24/outline";
-import { useVPNStore } from "./stores/vpnStore";
+import type { WebviewTag } from "electron";
+import { motion } from "framer-motion";
+import { createRef, useCallback, useEffect, useRef, useState } from "react";
+import icognifiLogo from "./assets/icognifi-alpha.png";
+import { BookmarksBar } from "./components/BookmarksBar";
+import { ErrorPage } from "./components/ErrorPage";
+import { HistoryPage } from "./components/HistoryPage";
+import { NavigationBar } from "./components/NavigationBar";
+import { SocialBar } from "./components/SocialBar";
+import { TitleBar } from "./components/TitleBar";
+import { defaultBookmarks } from "./data/defaultBookmarks";
 import { useServerStore } from "./stores/serverStore";
+import { useVPNStore } from "./stores/vpnStore";
+import { Bookmark, HistoryEntry, Tab } from "./types";
 
 // Debounce utility function
 const debounce = (func: Function, wait: number) => {
@@ -656,6 +658,12 @@ export default function App() {
     [vpnState.isConnected, isAutoSwitching, servers.length, vpnState.currentServer.id, failedServerIds]
   );
 
+  const handleOpenSettings = () => {
+    // Trigger VPN dropdown opening via custom event
+    const event = new CustomEvent("open-vpn-dropdown");
+    window.dispatchEvent(event);
+  };
+
   return (
     <div className="flex flex-col h-screen bg-white">
       <TitleBar
@@ -758,7 +766,7 @@ export default function App() {
                 tab.id === activeTabId ? "block" : "hidden"
               }`}
             >
-              <div className="flex flex-col items-center justify-start min-h-full py-8">
+              <div className="flex flex-col items-center justify-start min-h-full py-8 pb-20">
                 <div className="flex flex-col items-center justify-center max-w-4xl w-full px-4">
                   <motion.img
                     initial={{ scale: 0.5, opacity: 0 }}
@@ -785,6 +793,14 @@ export default function App() {
                     >
                       Your secure and private browsing experience starts here. Enjoy these features:
                     </motion.p>
+                    <motion.p
+                      initial={{ opacity: 0 }}
+                      animate={{ opacity: 1 }}
+                      transition={{ duration: 0.5, delay: 0.45 }}
+                      className="text-sm text-violet-600 bg-violet-50 rounded-lg p-2 border border-violet-200"
+                    >
+                      💡 Tip: Click the IcogniFi logo in the top title bar to access advanced settings and preferences
+                    </motion.p>
                     <div className="grid grid-cols-3 gap-4 px-4">
                       <motion.div
                         initial={{ opacity: 0, x: -20 }}
@@ -810,60 +826,105 @@ export default function App() {
                         initial={{ opacity: 0, x: 20 }}
                         animate={{ opacity: 1, x: 0 }}
                         transition={{ duration: 0.5, delay: 0.7 }}
-                        className="p-4 bg-white rounded-xl shadow-md hover:shadow-lg transition-all hover:scale-105"
+                        className="p-4 bg-white rounded-xl shadow-md hover:shadow-lg transition-all hover:scale-105 relative overflow-hidden group"
                       >
-                        <UserGroupIcon className="w-8 h-8 text-violet-600 mb-2 mx-auto" />
-                        <h3 className="text-lg font-medium text-violet-700 mb-1">Social Features</h3>
+                        <div className="absolute inset-0 bg-gray-500 bg-opacity-30 backdrop-blur-sm flex items-center justify-center opacity-0 group-hover:opacity-100 transition-opacity">
+                          <span className="text-white text-lg font-bold">Coming Soon</span>
+                        </div>
+                        <ChatBubbleLeftRightIcon className="w-8 h-8 text-violet-600 mb-2 mx-auto" />
+                        <h3 className="text-lg font-medium text-violet-700 mb-1 flex items-center justify-center">
+                          Social Chat
+                          <ClockIcon className="w-4 h-4 text-gray-400 ml-2" />
+                        </h3>
                         <p className="text-sm text-gray-600">Connect with friends while maintaining privacy</p>
                       </motion.div>
                       <motion.div
                         initial={{ opacity: 0, x: -20 }}
                         animate={{ opacity: 1, x: 0 }}
                         transition={{ duration: 0.5, delay: 0.8 }}
-                        className="p-4 bg-white rounded-xl shadow-md hover:shadow-lg transition-all hover:scale-105"
+                        className="p-4 bg-white rounded-xl shadow-md hover:shadow-lg transition-all hover:scale-105 relative overflow-hidden group"
                       >
-                        <BookmarkIcon className="w-8 h-8 text-violet-600 mb-2 mx-auto" />
-                        <h3 className="text-lg font-medium text-violet-700 mb-1">Bookmarks</h3>
-                        <p className="text-sm text-gray-600">Easily save and organize your favorite sites</p>
+                        <div className="absolute inset-0 bg-gray-500 bg-opacity-30 backdrop-blur-sm flex items-center justify-center opacity-0 group-hover:opacity-100 transition-opacity">
+                          <span className="text-white text-lg font-bold">Coming Soon</span>
+                        </div>
+                        <KeyIcon className="w-8 h-8 text-violet-600 mb-2 mx-auto" />
+                        <h3 className="text-lg font-medium text-violet-700 mb-1 flex items-center justify-center">
+                          Password & Key Manager
+                          <ClockIcon className="w-4 h-4 text-gray-400 ml-2" />
+                        </h3>
+                        <p className="text-sm text-gray-600">
+                          Securely store and manage your sensitive data with different custodial options
+                        </p>
                       </motion.div>
                       <motion.div
                         initial={{ opacity: 0, y: 20 }}
                         animate={{ opacity: 1, y: 0 }}
                         transition={{ duration: 0.5, delay: 0.9 }}
-                        className="p-4 bg-white rounded-xl shadow-md hover:shadow-lg transition-all hover:scale-105"
+                        className="p-4 bg-white rounded-xl shadow-md hover:shadow-lg transition-all hover:scale-105 relative overflow-hidden group"
                       >
-                        <LockClosedIcon className="w-8 h-8 text-violet-600 mb-2 mx-auto" />
-                        <h3 className="text-lg font-medium text-violet-700 mb-1">Password Manager</h3>
-                        <p className="text-sm text-gray-600">Coming Soon - Securely store and manage your passwords</p>
+                        <div className="absolute inset-0 bg-gray-500 bg-opacity-30 backdrop-blur-sm flex items-center justify-center opacity-0 group-hover:opacity-100 transition-opacity">
+                          <span className="text-white text-lg font-bold">Coming Soon</span>
+                        </div>
+                        <WalletIcon className="w-8 h-8 text-violet-600 mb-2 mx-auto" />
+                        <h3 className="text-lg font-medium text-violet-700 mb-1 flex items-center justify-center">
+                          Non-Custodial Wallet
+                          <ClockIcon className="w-4 h-4 text-gray-400 ml-2" />
+                        </h3>
+                        <p className="text-sm text-gray-600">
+                          Integrated private non-custodial wallet with support for different chains
+                        </p>
                       </motion.div>
                       <motion.div
                         initial={{ opacity: 0, x: 20 }}
                         animate={{ opacity: 1, x: 0 }}
                         transition={{ duration: 0.5, delay: 1.0 }}
-                        className="p-4 bg-white rounded-xl shadow-md hover:shadow-lg transition-all hover:scale-105 opacity-70"
+                        className="p-4 bg-white rounded-xl shadow-md hover:shadow-lg transition-all hover:scale-105 relative overflow-hidden group"
                       >
-                        <CogIcon className="w-8 h-8 text-violet-600 mb-2 mx-auto" />
-                        <h3 className="text-lg font-medium text-violet-700 mb-1">Advanced Settings</h3>
-                        <p className="text-sm text-gray-600">Coming Soon - Customize your browsing experience</p>
+                        <div className="absolute inset-0 bg-gray-500 bg-opacity-30 backdrop-blur-sm flex items-center justify-center opacity-0 group-hover:opacity-100 transition-opacity">
+                          <span className="text-white text-lg font-bold">Coming Soon</span>
+                        </div>
+                        <ArrowsRightLeftIcon className="w-8 h-8 text-violet-600 mb-2 mx-auto" />
+                        <h3 className="text-lg font-medium text-violet-700 mb-1 flex items-center justify-center">
+                          Privacy DEX
+                          <ClockIcon className="w-4 h-4 text-gray-400 ml-2" />
+                        </h3>
+                        <p className="text-sm text-gray-600">
+                          Swap cryptocurrencies directly from your browser, privately and securely
+                        </p>
                       </motion.div>
                     </div>
-                    <motion.button
-                      initial={{ opacity: 0, y: 20 }}
-                      animate={{ opacity: 1, y: 0 }}
-                      transition={{ duration: 0.5, delay: 0.9 }}
-                      whileHover={{ scale: 1.05 }}
-                      whileTap={{ scale: 0.95 }}
-                      onClick={() => {
-                        updateTab(tab.id, { state: "normal" });
-                        const webview = webviewRefs.current[tab.id]?.current;
-                        if (webview) {
-                          webview.loadURL("https://www.google.com");
-                        }
-                      }}
-                      className="px-6 py-2 bg-violet-600 text-white text-base rounded-xl hover:bg-violet-700 transition-colors shadow-md hover:shadow-lg mt-8 mb-2"
-                    >
-                      Start Browsing
-                    </motion.button>
+                    <div className="flex flex-col items-center space-y-3">
+                      <motion.button
+                        initial={{ opacity: 0, y: 20 }}
+                        animate={{ opacity: 1, y: 0 }}
+                        transition={{ duration: 0.5, delay: 0.9 }}
+                        whileHover={{ scale: 1.05 }}
+                        whileTap={{ scale: 0.95 }}
+                        onClick={() => {
+                          updateTab(tab.id, { state: "normal" });
+                          const webview = webviewRefs.current[tab.id]?.current;
+                          if (webview) {
+                            webview.loadURL("https://www.google.com");
+                          }
+                        }}
+                        className="px-6 py-2 bg-violet-600 text-white text-base rounded-xl hover:bg-violet-700 transition-colors shadow-md hover:shadow-lg"
+                      >
+                        Start Browsing
+                      </motion.button>
+
+                      <motion.button
+                        initial={{ opacity: 0, y: 20 }}
+                        animate={{ opacity: 1, y: 0 }}
+                        transition={{ duration: 0.5, delay: 1.0 }}
+                        whileHover={{ scale: 1.05 }}
+                        whileTap={{ scale: 0.95 }}
+                        onClick={handleOpenSettings}
+                        className="px-6 py-2 bg-gray-100 text-gray-700 text-base rounded-xl hover:bg-gray-200 transition-colors shadow-md hover:shadow-lg flex items-center space-x-2"
+                      >
+                        <CogIcon className="w-5 h-5" />
+                        <span>Settings & Preferences</span>
+                      </motion.button>
+                    </div>
                   </div>
                 </div>
               </div>

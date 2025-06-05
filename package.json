@@ -1,7 +1,7 @@
 {
   "name": "icognifi",
-  "version": "1.0.0",
-  "description": "Electron-based browser with built-in proxy support",
+  "version": "1.1.0",
+  "description": "Electron-based browser with built-in VPN support",
   "main": "dist/main/main.js",
   "scripts": {
     "dev": "concurrently -k \"pnpm run dev:react\" \"pnpm run dev:electron\" \"wait-on tcp:5173 && pnpm run start:electron\"",

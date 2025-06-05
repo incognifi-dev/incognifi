@@ -34,6 +34,19 @@ export const TitleBar: React.FC<TitleBarProps> = ({
     }
   }, [hasAutoOpened]);
 
+  // Listen for VPN dropdown open events from social bar
+  useEffect(() => {
+    const handleOpenVPNDropdown = () => {
+      setIsVPNDropdownOpen(true);
+    };
+
+    window.addEventListener("open-vpn-dropdown", handleOpenVPNDropdown);
+
+    return () => {
+      window.removeEventListener("open-vpn-dropdown", handleOpenVPNDropdown);
+    };
+  }, []);
+
   // Detect if we're on macOS to show traffic lights spacer
   const isMac = typeof process !== "undefined" && process.platform === "darwin";
 

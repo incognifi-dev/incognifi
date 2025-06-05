@@ -1,6 +1,6 @@
 import { AnimatePresence, motion } from "framer-motion";
 import { useEffect, useState } from "react";
-import { FiChevronUp, FiMapPin, FiMessageSquare } from "react-icons/fi";
+import { FiChevronUp, FiMapPin, FiMessageSquare, FiSettings } from "react-icons/fi";
 import { dummyFriends } from "../data/dummyFriends";
 import { useVPNStore } from "../stores/vpnStore";
 import type { Chat, UserData, UserStatus } from "../types/social";
@@ -137,6 +137,12 @@ export function SocialBar() {
     return { right: baseRight + (windowWidth + spacing) * index };
   };
 
+  const handleSettingsClick = () => {
+    // Trigger VPN dropdown opening via custom event
+    const event = new CustomEvent("open-vpn-dropdown");
+    window.dispatchEvent(event);
+  };
+
   return (
     <>
       {/* Bottom Bar */}
@@ -218,6 +224,15 @@ export function SocialBar() {
               )}
             </div>
             <span className="text-sm font-medium">Chat Demo</span>
+          </button>
+
+          {/* Settings Button */}
+          <button
+            onClick={handleSettingsClick}
+            className="flex items-center space-x-2 text-gray-300 hover:text-white transition-colors px-3 py-1 rounded-lg hover:bg-gray-800"
+          >
+            <FiSettings className="w-5 h-5" />
+            <span className="text-sm font-medium">Settings</span>
           </button>
         </div>
       </div>
