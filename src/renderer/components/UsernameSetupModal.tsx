@@ -1,5 +1,4 @@
 import React, { useState } from "react";
-import { motion } from "framer-motion";
 import { FiX } from "react-icons/fi";
 
 interface UsernameSetupModalProps {
@@ -32,13 +31,8 @@ export function UsernameSetupModal({ onComplete, onClose }: UsernameSetupModalPr
   };
 
   return (
-    <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50">
-      <motion.div
-        initial={{ scale: 0.9, opacity: 0 }}
-        animate={{ scale: 1, opacity: 1 }}
-        exit={{ scale: 0.9, opacity: 0 }}
-        className="bg-gray-900 rounded-lg shadow-xl w-full max-w-md p-6 relative"
-      >
+    <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 backdrop-enter">
+      <div className="bg-gray-900 rounded-lg shadow-xl w-full max-w-md p-6 relative animate-pop-in">
         <button
           onClick={onClose}
           className="absolute top-4 right-4 text-gray-400 hover:text-white transition-colors"
@@ -84,14 +78,14 @@ export function UsernameSetupModal({ onComplete, onClose }: UsernameSetupModalPr
           <div className="flex justify-end">
             <button
               type="submit"
-              className="px-6 py-2 bg-violet-600 text-white rounded-lg font-medium hover:bg-violet-700 focus:outline-none focus:ring-2 focus:ring-violet-500 focus:ring-offset-2 focus:ring-offset-gray-900 disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
+              className="px-6 py-2 bg-violet-600 text-white rounded-lg font-medium hover:bg-violet-700 focus:outline-none focus:ring-2 focus:ring-violet-500 focus:ring-offset-2 focus:ring-offset-gray-900 disabled:opacity-50 disabled:cursor-not-allowed transition-colors hover-scale"
               disabled={!username.trim()}
             >
               Get Started
             </button>
           </div>
         </form>
-      </motion.div>
+      </div>
     </div>
   );
 }

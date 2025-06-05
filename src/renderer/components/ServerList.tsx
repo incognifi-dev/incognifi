@@ -1,7 +1,6 @@
 /// <reference types="vite/client" />
 
-import { AnimatePresence, motion } from "framer-motion";
-import { useState } from "react";
+import React, { useState } from "react";
 import { FiCheck, FiGlobe, FiMapPin, FiShield } from "react-icons/fi";
 
 // Since contextIsolation is false, we can access electron directly
@@ -192,6 +191,19 @@ export function ServerList({ onSelect }: ServerListProps) {
   const [selectedCountry, setSelectedCountry] = useState<string>("US");
   const [isLoading, setIsLoading] = useState(false);
   const [message, setMessage] = useState<{ type: "success" | "error"; text: string } | null>(null);
+  const [showMessage, setShowMessage] = useState(false);
+
+  // Handle message display animations
+  React.useEffect(() => {
+    if (message) {
+      setShowMessage(true);
+      const timer = setTimeout(() => {
+        setShowMessage(false);
+        setTimeout(() => setMessage(null), 300); // Wait for fade out animation
+      }, 3000);
+      return () => clearTimeout(timer);
+    }
+  }, [message]);
 
   // Quick server selection function
   const handleQuickServerSelect = async (countryCode: string) => {
@@ -241,7 +253,6 @@ export function ServerList({ onSelect }: ServerListProps) {
       setMessage({ type: "error", text: "Failed to switch server" });
     } finally {
       setIsLoading(false);
-      setTimeout(() => setMessage(null), 3000);
     }
   };
 
@@ -249,11 +260,7 @@ export function ServerList({ onSelect }: ServerListProps) {
     <div className="space-y-6 p-4">
       {/* Header */}
       <div className="text-center">
-        <motion.div
-          initial={{ opacity: 0, y: 20 }}
-          animate={{ opacity: 1, y: 0 }}
-          className="bg-gradient-to-r from-indigo-50 to-purple-50 p-4 rounded-lg border border-indigo-200"
-        >
+        <div className="bg-gradient-to-r from-indigo-50 to-purple-50 p-4 rounded-lg border border-indigo-200 animate-fade-in">
           <div className="flex items-center justify-center mb-2">
             <FiShield className="w-6 h-6 text-indigo-600 mr-2" />
             <h2 className="text-xl font-bold text-indigo-800">Residential Proxies</h2>
@@ -261,16 +268,11 @@ export function ServerList({ onSelect }: ServerListProps) {
           <p className="text-sm text-indigo-600">
             Premium residential proxy network with global coverage and high success rates
           </p>
-        </motion.div>
+        </div>
       </div>
 
       {/* Quick Server Selection */}
-      <motion.div
-        initial={{ opacity: 0, y: 20 }}
-        animate={{ opacity: 1, y: 0 }}
-        transition={{ delay: 0.1 }}
-        className="bg-white rounded-lg border border-gray-200 p-6 space-y-4"
-      >
+      <div className="bg-white rounded-lg border border-gray-200 p-6 space-y-4 animate-slide-up animate-delay-100">
         <h3 className="text-lg font-semibold text-gray-800 flex items-center">
           <FiGlobe className="w-5 h-5 mr-2" />
           Quick Country Selection
@@ -278,14 +280,13 @@ export function ServerList({ onSelect }: ServerListProps) {
         <p className="text-sm text-gray-600 mb-4">Click on a country to quickly switch your proxy location:</p>
 
         <div className="grid grid-cols-3 gap-2 max-h-96 overflow-y-auto">
-          {COMMON_COUNTRIES.map((country) => (
-            <motion.button
+          {COMMON_COUNTRIES.map((country, index) => (
+            <button
               key={country.code}
               onClick={() => handleQuickServerSelect(country.code)}
               disabled={isLoading}
-              whileHover={{ scale: 1.02 }}
-              whileTap={{ scale: 0.98 }}
-              className={`flex items-center p-2 rounded-lg border transition-all ${
+              style={{ animationDelay: `${index * 10}ms` }}
+              className={`flex items-center p-2 rounded-lg border transition-all hover-scale animate-fade-in ${
                 selectedCountry === country.code
                   ? "border-indigo-500 bg-indigo-50 text-indigo-700"
                   : "border-gray-200 hover:border-indigo-300 hover:bg-gray-50"
@@ -313,43 +314,33 @@ export function ServerList({ onSelect }: ServerListProps) {
                 <div className="text-xs text-gray-500">{country.code}</div>
               </div>
               {selectedCountry === country.code && <FiCheck className="w-4 h-4 text-indigo-600 ml-1" />}
-            </motion.button>
+            </button>
           ))}
         </div>
 
         {/* Message Display */}
-        <AnimatePresence>
-          {message && (
-            <motion.div
-              initial={{ opacity: 0, y: -10 }}
-              animate={{ opacity: 1, y: 0 }}
-              exit={{ opacity: 0, y: -10 }}
-              className={`mt-4 p-3 rounded-lg ${
-                message.type === "success"
-                  ? "bg-green-50 text-green-700 border border-green-200"
-                  : "bg-red-50 text-red-700 border border-red-200"
-              }`}
-            >
-              <div className="flex items-center">
-                {message.type === "success" ? (
-                  <FiCheck className="w-4 h-4 mr-2" />
-                ) : (
-                  <FiShield className="w-4 h-4 mr-2" />
-                )}
-                {message.text}
-              </div>
-            </motion.div>
-          )}
-        </AnimatePresence>
-      </motion.div>
+        {message && (
+          <div
+            className={`mt-4 p-3 rounded-lg transition-all ${showMessage ? "animate-slide-down" : "animate-fade-out"} ${
+              message.type === "success"
+                ? "bg-green-50 text-green-700 border border-green-200"
+                : "bg-red-50 text-red-700 border border-red-200"
+            }`}
+          >
+            <div className="flex items-center">
+              {message.type === "success" ? (
+                <FiCheck className="w-4 h-4 mr-2" />
+              ) : (
+                <FiShield className="w-4 h-4 mr-2" />
+              )}
+              {message.text}
+            </div>
+          </div>
+        )}
+      </div>
 
       {/* Information Section */}
-      <motion.div
-        initial={{ opacity: 0, y: 20 }}
-        animate={{ opacity: 1, y: 0 }}
-        transition={{ delay: 0.2 }}
-        className="bg-gradient-to-r from-blue-50 to-indigo-50 rounded-lg p-4 border border-blue-200"
-      >
+      <div className="bg-gradient-to-r from-blue-50 to-indigo-50 rounded-lg p-4 border border-blue-200 animate-slide-up animate-delay-200">
         <div className="space-y-3">
           <div className="flex items-start space-x-3">
             <FiMapPin className="w-5 h-5 text-blue-600 mt-0.5 flex-shrink-0" />
@@ -375,7 +366,7 @@ export function ServerList({ onSelect }: ServerListProps) {
             </div>
           </div>
         </div>
-      </motion.div>
+      </div>
     </div>
   );
 }

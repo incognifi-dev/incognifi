@@ -1,4 +1,3 @@
-import { AnimatePresence, motion } from "framer-motion";
 import { useState } from "react";
 import { FiChevronDown } from "react-icons/fi";
 import type { UserStatus } from "../types/social";
@@ -30,43 +29,36 @@ export function StatusSelector({ currentStatus, onStatusChange }: StatusSelector
         <FiChevronDown className={`w-4 h-4 transition-transform ${isOpen ? "rotate-180" : ""}`} />
       </button>
 
-      <AnimatePresence>
-        {isOpen && (
-          <>
-            {/* Backdrop */}
-            <div
-              className="fixed inset-0 z-40"
-              onClick={() => setIsOpen(false)}
-            />
+      {isOpen && (
+        <>
+          {/* Backdrop */}
+          <div
+            className="fixed inset-0 z-40"
+            onClick={() => setIsOpen(false)}
+          />
 
-            {/* Dropdown */}
-            <motion.div
-              initial={{ opacity: 0, y: -4 }}
-              animate={{ opacity: 1, y: 0 }}
-              exit={{ opacity: 0, y: -4 }}
-              className="absolute bottom-full mb-2 right-0 w-32 bg-gray-900 rounded-lg shadow-lg border border-gray-800 overflow-hidden z-50"
-            >
-              {statusOptions.map((option) => (
-                <button
-                  key={option.value}
-                  onClick={() => {
-                    onStatusChange(option.value);
-                    setIsOpen(false);
-                  }}
-                  className={`w-full flex items-center space-x-2 px-3 py-2 text-sm ${
-                    currentStatus === option.value
-                      ? "bg-violet-600 text-white"
-                      : "text-gray-300 hover:bg-gray-800 hover:text-white"
-                  } transition-colors`}
-                >
-                  <div className={`w-2 h-2 rounded-full ${option.color}`} />
-                  <span>{option.label}</span>
-                </button>
-              ))}
-            </motion.div>
-          </>
-        )}
-      </AnimatePresence>
+          {/* Dropdown */}
+          <div className="absolute bottom-full mb-2 right-0 w-32 bg-gray-900 rounded-lg shadow-lg border border-gray-800 overflow-hidden z-50 animate-slide-up">
+            {statusOptions.map((option) => (
+              <button
+                key={option.value}
+                onClick={() => {
+                  onStatusChange(option.value);
+                  setIsOpen(false);
+                }}
+                className={`w-full flex items-center space-x-2 px-3 py-2 text-sm ${
+                  currentStatus === option.value
+                    ? "bg-violet-600 text-white"
+                    : "text-gray-300 hover:bg-gray-800 hover:text-white"
+                } transition-colors`}
+              >
+                <div className={`w-2 h-2 rounded-full ${option.color}`} />
+                <span>{option.label}</span>
+              </button>
+            ))}
+          </div>
+        </>
+      )}
     </div>
   );
 }

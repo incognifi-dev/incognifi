@@ -1,4 +1,3 @@
-import { AnimatePresence, motion } from "framer-motion";
 import React from "react";
 import { FiActivity, FiCheck, FiRefreshCw, FiSettings, FiX, FiInfo, FiShield, FiMapPin } from "react-icons/fi";
 import { useVPNStore } from "../stores/vpnStore";
@@ -20,6 +19,10 @@ export function VPNDropdown({ isOpen, onClose }: VPNDropdownProps) {
   const [showServerList, setShowServerList] = React.useState(false);
   const [hasAutoOpened, setHasAutoOpened] = React.useState(false);
   const [message, setMessage] = React.useState<{ type: "success" | "error"; text: string } | null>(null);
+
+  // Animation states
+  const [isClosing, setIsClosing] = React.useState(false);
+  const [showMessage, setShowMessage] = React.useState(false);
 
   // Live latency monitoring state
   const [currentLatency, setCurrentLatency] = React.useState<number | null>(null);
@@ -121,11 +124,33 @@ export function VPNDropdown({ isOpen, onClose }: VPNDropdownProps) {
       setIsCheckingLatency(false);
       setMessage(null);
       setIsLoading(false);
+      setIsClosing(false);
+      setShowMessage(false);
 
       // Clear any pending message timeouts
       // Note: Individual timeouts from setTimeout should be tracked with refs if we need to clear them
     }
   }, [isOpen]);
+
+  // Handle message display animations
+  React.useEffect(() => {
+    if (message) {
+      setShowMessage(true);
+      const timer = setTimeout(() => {
+        setShowMessage(false);
+        setTimeout(() => setMessage(null), 300); // Wait for fade out animation
+      }, 3000);
+      return () => clearTimeout(timer);
+    }
+  }, [message]);
+
+  const handleClose = () => {
+    setIsClosing(true);
+    setTimeout(() => {
+      onClose();
+      setIsClosing(false);
+    }, 300); // Match animation duration
+  };
 
   const toggleConnection = async () => {
     if (vpnState.isConnected) {
@@ -137,7 +162,6 @@ export function VPNDropdown({ isOpen, onClose }: VPNDropdownProps) {
 
         if (result.success) {
           setMessage({ type: "success", text: "Proxy disconnected" });
-          setTimeout(() => setMessage(null), 3000);
 
           // Refresh the current tab to use direct connection
           await ipcRenderer.invoke("refresh-current-tab");
@@ -157,7 +181,6 @@ export function VPNDropdown({ isOpen, onClose }: VPNDropdownProps) {
       // Connect - but we need a server selected first
       if (!vpnState.currentServer.id) {
         setMessage({ type: "error", text: "Please select a server first" });
-        setTimeout(() => setMessage(null), 3000);
         return;
       }
 
@@ -175,7 +198,6 @@ export function VPNDropdown({ isOpen, onClose }: VPNDropdownProps) {
 
         if (result.success) {
           setMessage({ type: "success", text: "Proxy connected" });
-          setTimeout(() => setMessage(null), 3000);
 
           // Refresh the current tab to use proxy connection
           await ipcRenderer.invoke("refresh-current-tab");
@@ -229,7 +251,6 @@ export function VPNDropdown({ isOpen, onClose }: VPNDropdownProps) {
           type: "success",
           text: `Successfully switched to ${server.country}`,
         });
-        setTimeout(() => setMessage(null), 3000);
 
         // Refresh the current tab to use the new proxy
         await ipcRenderer.invoke("refresh-current-tab");
@@ -275,251 +296,197 @@ export function VPNDropdown({ isOpen, onClose }: VPNDropdownProps) {
     return 600;
   };
 
-  return (
-    <AnimatePresence>
-      {isOpen && (
-        <>
-          {/* Backdrop */}
-          <motion.div
-            initial={{ opacity: 0 }}
-            animate={{ opacity: 1 }}
-            exit={{ opacity: 0 }}
-            className="fixed inset-0 bg-black/20 z-[100]"
-            onClick={onClose}
-          />
+  if (!isOpen) return null;
 
-          {/* Dropdown */}
-          <motion.div
-            initial={{ opacity: 0, y: -20, width: 320 }}
-            animate={{
-              opacity: 1,
-              y: 0,
-              width: getDropdownWidth(),
-              transition: {
-                width: { type: "spring", stiffness: 300, damping: 30 },
-              },
-            }}
-            exit={{ opacity: 0, y: -20 }}
-            transition={{ type: "spring", stiffness: 300, damping: 30 }}
-            className="fixed mt-10 bg-white rounded-xl shadow-xl overflow-hidden z-[101] max-h-[80vh] flex flex-col"
-            style={{ top: "0", left: "1rem" }}
-          >
-            {/* Header */}
-            <div className="bg-gradient-to-r from-violet-600 to-indigo-600 px-4 py-3 flex-shrink-0">
-              <div className="flex items-center justify-between">
-                <h3 className="text-white font-medium">VPN Connection</h3>
-                <div className="flex items-center space-x-2">
-                  {/* Simplified activity indicator - only animate when checking latency */}
-                  <FiActivity className={`w-5 h-5 ${vpnState.isConnected ? "text-green-400" : "text-red-400"}`} />
-                  <button
-                    onClick={onClose}
-                    className="p-1 hover:bg-white/20 rounded-full transition-colors"
-                  >
-                    <FiX className="w-5 h-5 text-white" />
-                  </button>
-                </div>
+  return (
+    <>
+      {/* Backdrop */}
+      <div
+        className={`fixed inset-0 bg-black/20 z-[100] ${isClosing ? "backdrop-exit" : "backdrop-enter"}`}
+        onClick={handleClose}
+      />
+
+      {/* Dropdown */}
+      <div
+        className={`fixed mt-10 bg-white rounded-xl shadow-xl overflow-hidden z-[101] max-h-[80vh] flex flex-col transition-width ${
+          isClosing ? "dropdown-exit" : "dropdown-enter"
+        }`}
+        style={{
+          top: "0",
+          left: "1rem",
+          width: `${getDropdownWidth()}px`,
+        }}
+      >
+        {/* Header */}
+        <div className="bg-gradient-to-r from-violet-600 to-indigo-600 px-4 py-3 flex-shrink-0">
+          <div className="flex items-center justify-between">
+            <h3 className="text-white font-medium">VPN Connection</h3>
+            <div className="flex items-center space-x-2">
+              {/* Simplified activity indicator - only animate when checking latency */}
+              <FiActivity className={`w-5 h-5 ${vpnState.isConnected ? "text-green-400" : "text-red-400"}`} />
+              <button
+                onClick={handleClose}
+                className="p-1 hover:bg-white/20 rounded-full transition-colors"
+              >
+                <FiX className="w-5 h-5 text-white" />
+              </button>
+            </div>
+          </div>
+        </div>
+
+        {/* Content */}
+        <div className="flex-1 overflow-hidden">
+          {showServerList ? (
+            <div className={`flex flex-col min-h-[400px] ${showServerList ? "server-list-enter" : "server-list-exit"}`}>
+              <div className="px-4 py-2 border-b border-gray-200 flex-shrink-0">
+                <h4 className="font-medium text-gray-700">Configure VPN</h4>
+              </div>
+              <div className="flex-1 overflow-y-auto">
+                <ServerList onSelect={handleServerSelect} />
               </div>
             </div>
+          ) : (
+            <div className={`p-4 overflow-y-auto ${!showServerList ? "main-content-enter" : "main-content-exit"}`}>
+              {/* Status */}
+              <div className="flex items-center justify-between mb-4">
+                <span className="text-gray-600">Status</span>
+                <span
+                  className={`font-medium animate-fade-in ${vpnState.isConnected ? "text-green-500" : "text-red-500"}`}
+                >
+                  {vpnState.isConnected ? "Connected" : "Disconnected"}
+                </span>
+              </div>
 
-            {/* Content */}
-            <div className="flex-1 overflow-hidden">
-              <AnimatePresence mode="wait">
-                {showServerList ? (
-                  <motion.div
-                    key="server-list"
-                    initial={{ opacity: 0, x: 50 }}
-                    animate={{ opacity: 1, x: 0 }}
-                    exit={{ opacity: 0, x: -50 }}
-                    className="flex flex-col min-h-[400px]"
-                  >
-                    <div className="px-4 py-2 border-b border-gray-200 flex-shrink-0">
-                      <h4 className="font-medium text-gray-700">Configure VPN</h4>
-                    </div>
-                    <div className="flex-1 overflow-y-auto">
-                      <ServerList onSelect={handleServerSelect} />
-                    </div>
-                  </motion.div>
-                ) : (
-                  <motion.div
-                    key="main-content"
-                    initial={{ opacity: 0, x: -50 }}
-                    animate={{ opacity: 1, x: 0 }}
-                    exit={{ opacity: 0, x: 50 }}
-                    className="p-4 overflow-y-auto"
-                  >
-                    {/* Status */}
-                    <div className="flex items-center justify-between mb-4">
-                      <span className="text-gray-600">Status</span>
-                      <motion.span
-                        key={vpnState.isConnected ? "connected" : "disconnected"}
-                        initial={{ opacity: 0, y: -10 }}
-                        animate={{ opacity: 1, y: 0 }}
-                        exit={{ opacity: 0, y: 10 }}
-                        className={`font-medium ${vpnState.isConnected ? "text-green-500" : "text-red-500"}`}
-                      >
-                        {vpnState.isConnected ? "Connected" : "Disconnected"}
-                      </motion.span>
-                    </div>
-
-                    {/* Live Latency */}
-                    {vpnState.isConnected && vpnState.currentServer.type === "oxylabs-residential" && (
-                      <div className="space-y-4 mb-4">
-                        <div className="flex items-center justify-between">
-                          <span className="text-gray-600">Live Latency</span>
-                          <div className="flex items-center">
-                            {isCheckingLatency ? (
-                              <motion.div
-                                animate={{ rotate: 360 }}
-                                transition={{ duration: 1, repeat: Infinity, ease: "linear" }}
-                                className="mr-3"
-                              >
-                                <FiRefreshCw className="w-4 h-4 text-violet-600" />
-                              </motion.div>
-                            ) : (
-                              // Static dot instead of infinitely animating one
-                              <div
-                                style={{
-                                  width: "12px",
-                                  height: "12px",
-                                  borderRadius: "50%",
-                                  backgroundColor: getLatencyDotColor(currentLatency),
-                                }}
-                                className="mr-3"
-                              />
-                            )}
-                            <div className="text-right">
-                              <span className={`font-medium ${getLatencyColor(currentLatency)}`}>
-                                {currentLatency !== null ? `${currentLatency}ms` : "N/A"}
-                              </span>
-                              <div className={`text-xs ${getLatencyColor(currentLatency)}`}>
-                                {getLatencyStatus(currentLatency)}
-                              </div>
-                            </div>
-                          </div>
+              {/* Live Latency */}
+              {vpnState.isConnected && vpnState.currentServer.type === "oxylabs-residential" && (
+                <div className="space-y-4 mb-4">
+                  <div className="flex items-center justify-between">
+                    <span className="text-gray-600">Live Latency</span>
+                    <div className="flex items-center">
+                      {isCheckingLatency ? (
+                        <div className="mr-3">
+                          <FiRefreshCw className="w-4 h-4 text-violet-600 animate-spin" />
                         </div>
-
-                        {/* Server Info */}
-                        <div className="flex items-center justify-between">
-                          <span className="text-gray-600">Location</span>
-                          <span className="font-medium text-gray-800">
-                            {vpnState.currentServer.city}, {vpnState.currentServer.country}
-                          </span>
-                        </div>
-                      </div>
-                    )}
-
-                    {/* Message Display */}
-                    <AnimatePresence>
-                      {message && (
-                        <motion.div
-                          initial={{ opacity: 0, y: -10 }}
-                          animate={{ opacity: 1, y: 0 }}
-                          exit={{ opacity: 0, y: -10 }}
-                          className={`mb-4 p-3 rounded-lg ${
-                            message.type === "success"
-                              ? "bg-green-50 text-green-700 border border-green-200"
-                              : "bg-red-50 text-red-700 border border-red-200"
-                          }`}
-                        >
-                          <div className="flex items-center">
-                            {message.type === "success" ? (
-                              <FiCheck className="w-4 h-4 mr-2" />
-                            ) : (
-                              <FiX className="w-4 h-4 mr-2" />
-                            )}
-                            {message.text}
-                          </div>
-                        </motion.div>
+                      ) : (
+                        // Static dot instead of infinitely animating one
+                        <div
+                          style={{
+                            width: "12px",
+                            height: "12px",
+                            borderRadius: "50%",
+                            backgroundColor: getLatencyDotColor(currentLatency),
+                          }}
+                          className="mr-3"
+                        />
                       )}
-                    </AnimatePresence>
-
-                    {/* Information Section */}
-                    <motion.div
-                      initial={{ opacity: 0, y: 10 }}
-                      animate={{ opacity: 1, y: 0 }}
-                      className="bg-gradient-to-r from-blue-50 to-indigo-50 rounded-lg p-4 mb-4 border border-blue-200"
-                    >
-                      <div className="flex items-start space-x-3">
-                        <FiInfo className="w-5 h-5 text-blue-600 mt-0.5 flex-shrink-0" />
-                        <div className="space-y-3">
-                          <div>
-                            <h4 className="text-sm font-semibold text-blue-800 mb-1 flex items-center">
-                              <FiShield className="w-4 h-4 mr-1" />
-                              Premium Residential Network
-                            </h4>
-                            <p className="text-xs text-blue-700 leading-relaxed">
-                              Access to millions of residential IP addresses worldwide with high success rates and
-                              automatic rotation.
-                            </p>
-                          </div>
-
-                          <div className="border-t border-blue-200 pt-3">
-                            <h4 className="text-sm font-semibold text-blue-800 mb-1 flex items-center">
-                              <FiMapPin className="w-4 h-4 mr-1" />
-                              Country Targeting
-                            </h4>
-                            <p className="text-xs text-blue-700 leading-relaxed">
-                              Your connection is routed through residential proxies in your selected country for optimal
-                              geo-targeting and performance.
-                            </p>
-                          </div>
+                      <div className="text-right">
+                        <span className={`font-medium ${getLatencyColor(currentLatency)}`}>
+                          {currentLatency !== null ? `${currentLatency}ms` : "N/A"}
+                        </span>
+                        <div className={`text-xs ${getLatencyColor(currentLatency)}`}>
+                          {getLatencyStatus(currentLatency)}
                         </div>
                       </div>
-                    </motion.div>
-
-                    {/* Actions */}
-                    <div className="space-y-2">
-                      <button
-                        onClick={toggleConnection}
-                        disabled={isLoading}
-                        className={`w-full py-2 px-4 rounded-lg font-medium transition-colors relative ${
-                          isLoading
-                            ? "bg-violet-400 text-white cursor-not-allowed"
-                            : vpnState.isConnected
-                            ? "bg-red-500 hover:bg-red-600 text-white"
-                            : "bg-violet-600 hover:bg-violet-700 text-white"
-                        }`}
-                      >
-                        {isLoading ? (
-                          <motion.div
-                            className="flex items-center justify-center"
-                            initial={{ opacity: 0 }}
-                            animate={{ opacity: 1 }}
-                          >
-                            <motion.div
-                              className="w-5 h-5 border-2 border-white border-t-transparent rounded-full"
-                              animate={{ rotate: 360 }}
-                              transition={{ duration: 1, repeat: Infinity, ease: "linear" }}
-                            />
-                            <span className="ml-2">Connecting...</span>
-                          </motion.div>
-                        ) : (
-                          <motion.span
-                            key={vpnState.isConnected ? "disconnect" : "connect"}
-                            initial={{ opacity: 0, y: 5 }}
-                            animate={{ opacity: 1, y: 0 }}
-                            exit={{ opacity: 0, y: -5 }}
-                          >
-                            {vpnState.isConnected ? "Disconnect" : "Connect"}
-                          </motion.span>
-                        )}
-                      </button>
-
-                      <button
-                        onClick={() => setShowServerList(true)}
-                        className="w-full py-2 px-4 rounded-lg font-medium border border-violet-200 text-violet-600 hover:bg-violet-50 transition-colors flex items-center justify-center"
-                      >
-                        <FiSettings className="w-4 h-4 mr-2" />
-                        Configure VPN
-                      </button>
                     </div>
-                  </motion.div>
-                )}
-              </AnimatePresence>
+                  </div>
+
+                  {/* Server Info */}
+                  <div className="flex items-center justify-between">
+                    <span className="text-gray-600">Location</span>
+                    <span className="font-medium text-gray-800">
+                      {vpnState.currentServer.city}, {vpnState.currentServer.country}
+                    </span>
+                  </div>
+                </div>
+              )}
+
+              {/* Message Display */}
+              {message && (
+                <div
+                  className={`mb-4 p-3 rounded-lg transition-all ${
+                    showMessage ? "animate-slide-down" : "animate-fade-out"
+                  } ${
+                    message.type === "success"
+                      ? "bg-green-50 text-green-700 border border-green-200"
+                      : "bg-red-50 text-red-700 border border-red-200"
+                  }`}
+                >
+                  <div className="flex items-center">
+                    {message.type === "success" ? (
+                      <FiCheck className="w-4 h-4 mr-2" />
+                    ) : (
+                      <FiX className="w-4 h-4 mr-2" />
+                    )}
+                    {message.text}
+                  </div>
+                </div>
+              )}
+
+              {/* Information Section */}
+              <div className="bg-gradient-to-r from-blue-50 to-indigo-50 rounded-lg p-4 mb-4 border border-blue-200 animate-fade-in">
+                <div className="flex items-start space-x-3">
+                  <FiInfo className="w-5 h-5 text-blue-600 mt-0.5 flex-shrink-0" />
+                  <div className="space-y-3">
+                    <div>
+                      <h4 className="text-sm font-semibold text-blue-800 mb-1 flex items-center">
+                        <FiShield className="w-4 h-4 mr-1" />
+                        Premium Residential Network
+                      </h4>
+                      <p className="text-xs text-blue-700 leading-relaxed">
+                        Access to millions of residential IP addresses worldwide with high success rates and automatic
+                        rotation.
+                      </p>
+                    </div>
+
+                    <div className="border-t border-blue-200 pt-3">
+                      <h4 className="text-sm font-semibold text-blue-800 mb-1 flex items-center">
+                        <FiMapPin className="w-4 h-4 mr-1" />
+                        Country Targeting
+                      </h4>
+                      <p className="text-xs text-blue-700 leading-relaxed">
+                        Your connection is routed through residential proxies in your selected country for optimal
+                        geo-targeting and performance.
+                      </p>
+                    </div>
+                  </div>
+                </div>
+              </div>
+
+              {/* Actions */}
+              <div className="space-y-2">
+                <button
+                  onClick={toggleConnection}
+                  disabled={isLoading}
+                  className={`w-full py-2 px-4 rounded-lg font-medium transition-colors relative ${
+                    isLoading
+                      ? "bg-violet-400 text-white cursor-not-allowed"
+                      : vpnState.isConnected
+                      ? "bg-red-500 hover:bg-red-600 text-white"
+                      : "bg-violet-600 hover:bg-violet-700 text-white"
+                  }`}
+                >
+                  {isLoading ? (
+                    <div className="flex items-center justify-center animate-fade-in">
+                      <div className="w-5 h-5 border-2 border-white border-t-transparent rounded-full animate-spin" />
+                      <span className="ml-2">Connecting...</span>
+                    </div>
+                  ) : (
+                    <span className="animate-fade-in">{vpnState.isConnected ? "Disconnect" : "Connect"}</span>
+                  )}
+                </button>
+
+                <button
+                  onClick={() => setShowServerList(true)}
+                  className="w-full py-2 px-4 rounded-lg font-medium border border-violet-200 text-violet-600 hover:bg-violet-50 transition-colors flex items-center justify-center"
+                >
+                  <FiSettings className="w-4 h-4 mr-2" />
+                  Configure VPN
+                </button>
+              </div>
             </div>
-          </motion.div>
-        </>
-      )}
-    </AnimatePresence>
+          )}
+        </div>
+      </div>
+    </>
   );
 }

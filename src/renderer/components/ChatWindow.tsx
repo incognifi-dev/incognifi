@@ -1,4 +1,3 @@
-import { motion } from "framer-motion";
 import React, { useEffect, useRef, useState } from "react";
 import { FiMinus, FiSend, FiX } from "react-icons/fi";
 import { dummyMessages } from "../data/dummyFriends";
@@ -76,12 +75,9 @@ export function ChatWindow({ friend, onClose, onMinimize, position = { right: 28
   };
 
   return (
-    <motion.div
-      initial={{ opacity: 0, y: 20 }}
-      animate={{ opacity: 1, y: 0 }}
-      exit={{ opacity: 0, y: 20 }}
+    <div
       style={{ right: position.right }}
-      className="fixed bottom-12 w-80 h-96 bg-gray-900 rounded-t-lg overflow-hidden shadow-lg border border-gray-800"
+      className="fixed bottom-12 w-80 h-96 bg-gray-900 rounded-t-lg overflow-hidden shadow-lg border border-gray-800 animate-slide-up"
     >
       {/* Header */}
       <div className="p-3 border-b border-gray-800 flex items-center justify-between bg-gray-900/95 backdrop-blur-sm">
@@ -160,12 +156,12 @@ export function ChatWindow({ friend, onClose, onMinimize, position = { right: 28
           <button
             onClick={handleSendMessage}
             disabled={!message.trim()}
-            className="p-2 bg-violet-600 text-white rounded-lg hover:bg-violet-700 focus:outline-none focus:ring-2 focus:ring-violet-500 focus:ring-offset-2 focus:ring-offset-gray-900 disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
+            className="p-2 bg-violet-600 text-white rounded-lg hover:bg-violet-700 focus:outline-none focus:ring-2 focus:ring-violet-500 focus:ring-offset-2 focus:ring-offset-gray-900 disabled:opacity-50 disabled:cursor-not-allowed transition-colors hover-scale"
           >
             <FiSend className="w-5 h-5" />
           </button>
         </div>
       </div>
-    </motion.div>
+    </div>
   );
 }

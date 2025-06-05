@@ -10,7 +10,6 @@ import {
   ClockIcon,
 } from "@heroicons/react/24/outline";
 import type { WebviewTag } from "electron";
-import { motion } from "framer-motion";
 import { createRef, useCallback, useEffect, useRef, useState } from "react";
 import icognifiLogo from "./assets/icognifi-alpha.png";
 import { BookmarksBar } from "./components/BookmarksBar";
@@ -733,7 +732,7 @@ export default function App() {
                 <HistoryPage
                   history={history}
                   onHistoryClick={handleHistoryClick}
-                  onRemoveHistoryEntry={removeHistoryEntry}
+                  onRemoveEntry={removeHistoryEntry}
                   onClearHistory={clearHistory}
                 />
               </div>
@@ -757,77 +756,41 @@ export default function App() {
           }
 
           return tab.state === "splash" ? (
-            <motion.div
+            <div
               key={tab.id}
-              initial={{ opacity: 0, y: 20 }}
-              animate={{ opacity: 1, y: 0 }}
-              transition={{ duration: 0.5 }}
-              className={`h-full w-full overflow-auto bg-gradient-to-br from-violet-50 to-indigo-50 ${
+              className={`h-full w-full overflow-auto bg-gradient-to-br from-violet-50 to-indigo-50 animate-fade-in ${
                 tab.id === activeTabId ? "block" : "hidden"
               }`}
             >
               <div className="flex flex-col items-center justify-start min-h-full py-8 pb-20">
                 <div className="flex flex-col items-center justify-center max-w-4xl w-full px-4">
-                  <motion.img
-                    initial={{ scale: 0.5, opacity: 0 }}
-                    animate={{ scale: 1, opacity: 1 }}
-                    transition={{ duration: 0.5, delay: 0.2 }}
+                  <img
                     src={icognifiLogo}
                     alt="IcogniFi"
-                    className="w-24 h-24 mb-3 object-contain"
+                    className="w-24 h-24 mb-3 object-contain animate-scale-in animate-delay-200"
                   />
-                  <motion.h1
-                    initial={{ opacity: 0, y: 20 }}
-                    animate={{ opacity: 1, y: 0 }}
-                    transition={{ duration: 0.5, delay: 0.3 }}
-                    className="text-2xl font-semibold text-violet-900 mb-3"
-                  >
+                  <h1 className="text-2xl font-semibold text-violet-900 mb-3 animate-slide-up animate-delay-300">
                     Welcome to IcogniFi - Privacy Hub
-                  </motion.h1>
+                  </h1>
                   <div className="w-full text-center space-y-4">
-                    <motion.p
-                      initial={{ opacity: 0 }}
-                      animate={{ opacity: 1 }}
-                      transition={{ duration: 0.5, delay: 0.4 }}
-                      className="text-base text-gray-600"
-                    >
+                    <p className="text-base text-gray-600 animate-fade-in animate-delay-400">
                       Your secure and private browsing experience starts here. Enjoy these features:
-                    </motion.p>
-                    <motion.p
-                      initial={{ opacity: 0 }}
-                      animate={{ opacity: 1 }}
-                      transition={{ duration: 0.5, delay: 0.45 }}
-                      className="text-sm text-violet-600 bg-violet-50 rounded-lg p-2 border border-violet-200"
-                    >
+                    </p>
+                    <p className="text-sm text-violet-600 bg-violet-50 rounded-lg p-2 border border-violet-200 animate-fade-in animate-delay-400">
                       💡 Tip: Click the IcogniFi logo in the top title bar to access advanced settings and preferences
-                    </motion.p>
+                    </p>
                     <div className="grid grid-cols-3 gap-4 px-4">
-                      <motion.div
-                        initial={{ opacity: 0, x: -20 }}
-                        animate={{ opacity: 1, x: 0 }}
-                        transition={{ duration: 0.5, delay: 0.5 }}
-                        className="p-4 bg-white rounded-xl shadow-md hover:shadow-lg transition-all hover:scale-105"
-                      >
+                      <div className="p-4 bg-white rounded-xl shadow-md hover:shadow-lg transition-all hover:scale-105 animate-slide-right animate-delay-500">
                         <ShieldCheckIcon className="w-8 h-8 text-violet-600 mb-2 mx-auto" />
                         <h3 className="text-lg font-medium text-violet-700 mb-1">Built-in VPN</h3>
                         <p className="text-sm text-gray-600">Browse securely with our integrated VPN service</p>
-                      </motion.div>
-                      <motion.div
-                        initial={{ opacity: 0, y: -20 }}
-                        animate={{ opacity: 1, y: 0 }}
-                        transition={{ duration: 0.5, delay: 0.6 }}
-                        className="p-4 bg-white rounded-xl shadow-md hover:shadow-lg transition-all hover:scale-105"
-                      >
+                      </div>
+                      <div className="p-4 bg-white rounded-xl shadow-md hover:shadow-lg transition-all hover:scale-105 animate-slide-down animate-delay-600">
                         <GlobeAltIcon className="w-8 h-8 text-violet-600 mb-2 mx-auto" />
                         <h3 className="text-lg font-medium text-violet-700 mb-1">Private Browsing</h3>
                         <p className="text-sm text-gray-600">Enhanced privacy features to protect your data</p>
-                      </motion.div>
-                      <motion.div
-                        initial={{ opacity: 0, x: 20 }}
-                        animate={{ opacity: 1, x: 0 }}
-                        transition={{ duration: 0.5, delay: 0.7 }}
-                        className="p-4 bg-white rounded-xl shadow-md hover:shadow-lg transition-all hover:scale-105 relative overflow-hidden group"
-                      >
+                      </div>
+                      <div className="p-4 bg-white rounded-xl shadow-md hover:shadow-lg transition-all hover:scale-105 relative overflow-hidden group animate-slide-left animate-delay-700">
                         <div className="absolute inset-0 bg-gray-500 bg-opacity-30 backdrop-blur-sm flex items-center justify-center opacity-0 group-hover:opacity-100 transition-opacity">
                           <span className="text-white text-lg font-bold">Coming Soon</span>
                         </div>
@@ -837,13 +800,8 @@ export default function App() {
                           <ClockIcon className="w-4 h-4 text-gray-400 ml-2" />
                         </h3>
                         <p className="text-sm text-gray-600">Connect with friends while maintaining privacy</p>
-                      </motion.div>
-                      <motion.div
-                        initial={{ opacity: 0, x: -20 }}
-                        animate={{ opacity: 1, x: 0 }}
-                        transition={{ duration: 0.5, delay: 0.8 }}
-                        className="p-4 bg-white rounded-xl shadow-md hover:shadow-lg transition-all hover:scale-105 relative overflow-hidden group"
-                      >
+                      </div>
+                      <div className="p-4 bg-white rounded-xl shadow-md hover:shadow-lg transition-all hover:scale-105 relative overflow-hidden group animate-slide-right animate-delay-800">
                         <div className="absolute inset-0 bg-gray-500 bg-opacity-30 backdrop-blur-sm flex items-center justify-center opacity-0 group-hover:opacity-100 transition-opacity">
                           <span className="text-white text-lg font-bold">Coming Soon</span>
                         </div>
@@ -855,13 +813,8 @@ export default function App() {
                         <p className="text-sm text-gray-600">
                           Securely store and manage your sensitive data with different custodial options
                         </p>
-                      </motion.div>
-                      <motion.div
-                        initial={{ opacity: 0, y: 20 }}
-                        animate={{ opacity: 1, y: 0 }}
-                        transition={{ duration: 0.5, delay: 0.9 }}
-                        className="p-4 bg-white rounded-xl shadow-md hover:shadow-lg transition-all hover:scale-105 relative overflow-hidden group"
-                      >
+                      </div>
+                      <div className="p-4 bg-white rounded-xl shadow-md hover:shadow-lg transition-all hover:scale-105 relative overflow-hidden group animate-slide-up animate-delay-900">
                         <div className="absolute inset-0 bg-gray-500 bg-opacity-30 backdrop-blur-sm flex items-center justify-center opacity-0 group-hover:opacity-100 transition-opacity">
                           <span className="text-white text-lg font-bold">Coming Soon</span>
                         </div>
@@ -873,13 +826,8 @@ export default function App() {
                         <p className="text-sm text-gray-600">
                           Integrated private non-custodial wallet with support for different chains
                         </p>
-                      </motion.div>
-                      <motion.div
-                        initial={{ opacity: 0, x: 20 }}
-                        animate={{ opacity: 1, x: 0 }}
-                        transition={{ duration: 0.5, delay: 1.0 }}
-                        className="p-4 bg-white rounded-xl shadow-md hover:shadow-lg transition-all hover:scale-105 relative overflow-hidden group"
-                      >
+                      </div>
+                      <div className="p-4 bg-white rounded-xl shadow-md hover:shadow-lg transition-all hover:scale-105 relative overflow-hidden group animate-slide-left">
                         <div className="absolute inset-0 bg-gray-500 bg-opacity-30 backdrop-blur-sm flex items-center justify-center opacity-0 group-hover:opacity-100 transition-opacity">
                           <span className="text-white text-lg font-bold">Coming Soon</span>
                         </div>
@@ -891,15 +839,10 @@ export default function App() {
                         <p className="text-sm text-gray-600">
                           Swap cryptocurrencies directly from your browser, privately and securely
                         </p>
-                      </motion.div>
+                      </div>
                     </div>
                     <div className="flex flex-col items-center space-y-3">
-                      <motion.button
-                        initial={{ opacity: 0, y: 20 }}
-                        animate={{ opacity: 1, y: 0 }}
-                        transition={{ duration: 0.5, delay: 0.9 }}
-                        whileHover={{ scale: 1.05 }}
-                        whileTap={{ scale: 0.95 }}
+                      <button
                         onClick={() => {
                           updateTab(tab.id, { state: "normal" });
                           const webview = webviewRefs.current[tab.id]?.current;
@@ -907,28 +850,23 @@ export default function App() {
                             webview.loadURL("https://www.google.com");
                           }
                         }}
-                        className="px-6 py-2 bg-violet-600 text-white text-base rounded-xl hover:bg-violet-700 transition-colors shadow-md hover:shadow-lg"
+                        className="px-6 py-2 bg-violet-600 text-white text-base rounded-xl hover:bg-violet-700 transition-colors shadow-md hover:shadow-lg hover-scale animate-slide-up animate-delay-900"
                       >
                         Start Browsing
-                      </motion.button>
+                      </button>
 
-                      <motion.button
-                        initial={{ opacity: 0, y: 20 }}
-                        animate={{ opacity: 1, y: 0 }}
-                        transition={{ duration: 0.5, delay: 1.0 }}
-                        whileHover={{ scale: 1.05 }}
-                        whileTap={{ scale: 0.95 }}
+                      <button
                         onClick={handleOpenSettings}
-                        className="px-6 py-2 bg-gray-100 text-gray-700 text-base rounded-xl hover:bg-gray-200 transition-colors shadow-md hover:shadow-lg flex items-center space-x-2"
+                        className="px-6 py-2 bg-gray-100 text-gray-700 text-base rounded-xl hover:bg-gray-200 transition-colors shadow-md hover:shadow-lg flex items-center space-x-2 hover-scale animate-slide-up"
                       >
                         <CogIcon className="w-5 h-5" />
                         <span>Settings & Preferences</span>
-                      </motion.button>
+                      </button>
                     </div>
                   </div>
                 </div>
               </div>
-            </motion.div>
+            </div>
           ) : (
             <div
               key={tab.id}

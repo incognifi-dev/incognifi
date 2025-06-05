@@ -1,4 +1,3 @@
-import { AnimatePresence, motion } from "framer-motion";
 import { useEffect, useState } from "react";
 import { FiChevronUp, FiMapPin, FiMessageSquare, FiSettings } from "react-icons/fi";
 import { dummyFriends } from "../data/dummyFriends";
@@ -238,62 +237,51 @@ export function SocialBar() {
       </div>
 
       {/* Username Setup Modal */}
-      <AnimatePresence>
-        {isSetupModalOpen && (
-          <UsernameSetupModal
-            onComplete={handleSetupComplete}
-            onClose={() => setIsSetupModalOpen(false)}
-          />
-        )}
-      </AnimatePresence>
+      {isSetupModalOpen && (
+        <UsernameSetupModal
+          onComplete={handleSetupComplete}
+          onClose={() => setIsSetupModalOpen(false)}
+        />
+      )}
 
       {/* Friends List Panel */}
-      <AnimatePresence>
-        {isChatOpen && userData && (
-          <motion.div
-            initial={{ height: 0, opacity: 0 }}
-            animate={{ height: 400, opacity: 1 }}
-            exit={{ height: 0, opacity: 0 }}
-            className="fixed bottom-12 right-4 w-64 bg-gray-900 rounded-t-lg overflow-hidden shadow-lg border border-gray-800"
-          >
-            <div className="p-4 border-b border-gray-800 flex items-center justify-between">
-              <div>
-                <h3 className="text-white font-medium">Friends Demo</h3>
-                <p className="text-xs text-violet-400">Coming Soon Feature</p>
-              </div>
-              <button
-                onClick={() => setIsChatOpen(false)}
-                className="text-gray-400 hover:text-white transition-colors"
-              >
-                <FiChevronUp className="w-5 h-5" />
-              </button>
+      {isChatOpen && userData && (
+        <div className="fixed bottom-12 right-4 w-64 bg-gray-900 rounded-t-lg overflow-hidden shadow-lg border border-gray-800 animate-slide-up">
+          <div className="p-4 border-b border-gray-800 flex items-center justify-between">
+            <div>
+              <h3 className="text-white font-medium">Friends Demo</h3>
+              <p className="text-xs text-violet-400">Coming Soon Feature</p>
             </div>
-            <FriendsList
-              friends={dummyFriends}
-              onChatStart={handleChatStart}
-            />
-          </motion.div>
-        )}
-      </AnimatePresence>
+            <button
+              onClick={() => setIsChatOpen(false)}
+              className="text-gray-400 hover:text-white transition-colors"
+            >
+              <FiChevronUp className="w-5 h-5" />
+            </button>
+          </div>
+          <FriendsList
+            username={userData.username}
+            onClose={() => setIsChatOpen(false)}
+          />
+        </div>
+      )}
 
       {/* Chat Windows */}
-      <AnimatePresence>
-        {getVisibleChats().map((chat, index) => {
-          const friend = dummyFriends.find((f) => f.id === chat.friendId);
-          if (!friend) return null;
+      {getVisibleChats().map((chat, index) => {
+        const friend = dummyFriends.find((f) => f.id === chat.friendId);
+        if (!friend) return null;
 
-          return (
-            <ChatWindow
-              key={chat.id}
-              chatId={chat.id}
-              friend={friend}
-              onClose={() => handleChatClose(chat.id)}
-              onMinimize={() => handleChatMinimize(chat.id)}
-              position={getChatPosition(index)}
-            />
-          );
-        })}
-      </AnimatePresence>
+        return (
+          <ChatWindow
+            key={chat.id}
+            chatId={chat.id}
+            friend={friend}
+            onClose={() => handleChatClose(chat.id)}
+            onMinimize={() => handleChatMinimize(chat.id)}
+            position={getChatPosition(index)}
+          />
+        );
+      })}
     </>
   );
 }
