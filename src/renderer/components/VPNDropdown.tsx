@@ -13,8 +13,8 @@ import {
   FiInfo,
   FiClock,
   FiShield,
+  FiMapPin,
 } from "react-icons/fi";
-import { useServerStore } from "../stores/serverStore";
 import { useVPNStore } from "../stores/vpnStore";
 import { ServerList } from "./ServerList";
 
@@ -24,19 +24,6 @@ const { ipcRenderer } = window.require("electron");
 interface VPNDropdownProps {
   isOpen: boolean;
   onClose: () => void;
-}
-
-interface Server {
-  id: string;
-  country: string;
-  countryCode?: string;
-  city: string;
-  ip: string;
-  port: number;
-  ping: number | null;
-  isHealthy: boolean;
-  lastChecked: number;
-  type: string;
 }
 
 interface ProxyConfigType {
@@ -57,23 +44,17 @@ export function VPNDropdown({ isOpen, onClose }: VPNDropdownProps) {
   const [showProxyConfig, setShowProxyConfig] = React.useState(false);
   const [hasAutoOpened, setHasAutoOpened] = React.useState(false);
 
-  // dsa
-
-  // Get clearServers function from store
-  const { clearServers, servers } = useServerStore();
-
   // Proxy configuration state
   const [proxyConfig, setProxyConfig] = React.useState<ProxyConfigType>({
     enabled: false,
-    host: "127.0.0.1",
-    port: 1080,
-    type: "socks5",
+    host: "pr.oxylabs.io",
+    port: 7777,
+    type: "http",
   });
   const [isProxyLoading, setIsProxyLoading] = React.useState(false);
   const [proxyMessage, setProxyMessage] = React.useState<{ type: "success" | "error"; text: string } | null>(null);
   const [showPassword, setShowPassword] = React.useState(false);
   const [isTesting, setIsTesting] = React.useState(false);
-  const [isQuickSwitching, setIsQuickSwitching] = React.useState(false);
 
   // Live latency monitoring state
   const [currentLatency, setCurrentLatency] = React.useState<number | null>(null);
@@ -93,32 +74,8 @@ export function VPNDropdown({ isOpen, onClose }: VPNDropdownProps) {
     if (isOpen && !hasAutoOpened) {
       setShowServerList(true);
       setHasAutoOpened(true);
-      // Clear server cache to force a fresh scan
-      clearServers();
     }
-  }, [isOpen, hasAutoOpened, clearServers]);
-
-  // Listen for auto-switch events
-  React.useEffect(() => {
-    const handleAutoSwitch = (event: CustomEvent) => {
-      const { newServer, message } = event.detail;
-      console.log("🔄 [VPNDropdown] Received auto-switch event:", { newServer, message });
-
-      setProxyMessage({
-        type: "success",
-        text: `Auto-Switched: ${newServer.country} (${newServer.ping}ms) - Connection recovered`,
-      });
-
-      // Clear the message after 5 seconds (longer for auto-switch messages)
-      setTimeout(() => setProxyMessage(null), 5000);
-    };
-
-    window.addEventListener("auto-switch-complete", handleAutoSwitch as EventListener);
-
-    return () => {
-      window.removeEventListener("auto-switch-complete", handleAutoSwitch as EventListener);
-    };
-  }, []);
+  }, [isOpen, hasAutoOpened]);
 
   const loadProxyConfig = async () => {
     try {
@@ -218,7 +175,7 @@ export function VPNDropdown({ isOpen, onClose }: VPNDropdownProps) {
         const result = await ipcRenderer.invoke("set-proxy-config", updatedProxyConfig);
 
         if (result.success) {
-          setProxyMessage({ type: "success", text: "Proxy disabled and VPN disconnected" });
+          setProxyMessage({ type: "success", text: "Oxylabs proxy disconnected" });
           setTimeout(() => setProxyMessage(null), 3000);
 
           // Refresh the current tab to use direct connection
@@ -252,7 +209,7 @@ export function VPNDropdown({ isOpen, onClose }: VPNDropdownProps) {
         const result = await ipcRenderer.invoke("set-proxy-config", updatedProxyConfig);
 
         if (result.success) {
-          setProxyMessage({ type: "success", text: "Proxy enabled and VPN connected" });
+          setProxyMessage({ type: "success", text: "Oxylabs proxy connected" });
           setTimeout(() => setProxyMessage(null), 3000);
 
           // Refresh the current tab to use proxy connection
@@ -276,85 +233,68 @@ export function VPNDropdown({ isOpen, onClose }: VPNDropdownProps) {
     }
   };
 
-  const handleServerSelect = async (server: Server) => {
+  const handleServerSelect = async (server: any) => {
     setShowServerList(false);
-    if (server.id !== vpnState.currentServer.id) {
+
+    // If it's an Oxylabs server configuration
+    if (server.type === "oxylabs-residential" && server.oxylabsConfig) {
       setIsLoading(true);
 
       try {
-        // Update VPN state with new server
-        setCurrentServer(server);
+        // First, save the Oxylabs configuration to actually update the proxy settings
+        console.log(`🔄 [VPNDropdown] Saving Oxylabs config for server switch to ${server.country}`);
+        const saveResult = await ipcRenderer.invoke("save-oxylabs-config", server.oxylabsConfig);
+
+        if (!saveResult.success) {
+          console.error(`❌ [VPNDropdown] Failed to save Oxylabs config:`, saveResult.message);
+          setProxyMessage({ type: "error", text: `Failed to configure proxy: ${saveResult.message}` });
+          return;
+        }
+
+        console.log(`✅ [VPNDropdown] Oxylabs config saved successfully for ${server.country}`);
+
+        // Update VPN state with new server info
+        setCurrentServer({
+          id: server.id,
+          country: server.country,
+          countryCode: server.countryCode,
+          city: server.city,
+          ip: server.ip,
+          port: server.port,
+          ping: null,
+          isHealthy: true,
+          lastChecked: Date.now(),
+          type: server.type,
+        });
+
+        // Enable connection
         setConnectionStatus(true);
 
-        // Update proxy configuration with selected server and enable it
-        const updatedProxyConfig = {
-          ...proxyConfig,
-          host: server.ip,
-          port: server.port,
-          type: "http" as const, // Since we're fetching from HTTP proxy list
-          enabled: true, // Automatically enable proxy when server is selected
-        };
+        setProxyMessage({
+          type: "success",
+          text: `Successfully switched to ${server.country}`,
+        });
+        setTimeout(() => setProxyMessage(null), 3000);
 
-        setProxyConfig(updatedProxyConfig);
-
-        // Automatically save and enable the proxy configuration
-        const result = await ipcRenderer.invoke("set-proxy-config", updatedProxyConfig);
-
-        if (result.success) {
-          setProxyMessage({ type: "success", text: `Proxy enabled and updated to ${server.ip}:${server.port}` });
-          setTimeout(() => setProxyMessage(null), 3000);
-
-          // Refresh the current tab to use the new proxy
-          await ipcRenderer.invoke("refresh-current-tab");
-        } else {
-          setProxyMessage({ type: "error", text: "Failed to update proxy configuration" });
-        }
+        // Refresh the current tab to use the new proxy
+        console.log(`🔄 [VPNDropdown] Refreshing current tab to use new proxy for ${server.country}`);
+        await ipcRenderer.invoke("refresh-current-tab");
 
         // Simulate server switch delay
         await new Promise((resolve) => setTimeout(resolve, 1000));
       } catch (error) {
-        console.error("Failed to update proxy configuration:", error);
-        setProxyMessage({ type: "error", text: "Failed to update proxy configuration" });
+        console.error("Failed to configure Oxylabs proxy:", error);
+        setProxyMessage({ type: "error", text: "Failed to configure Oxylabs proxy" });
       } finally {
         setIsLoading(false);
       }
     }
   };
 
-  const getLatencyColor = (latency: number | null) => {
-    if (latency === null) return "text-gray-400";
-    if (latency >= 999 && latency < 1000) return "text-gray-500"; // Connection issues (keep for 999ms special case)
-    if (latency <= 1000) return "text-green-500"; // Excellent
-    if (latency <= 1500) return "text-orange-500"; // Fair
-    if (latency <= 2000) return "text-yellow-500"; // Good
-    return "text-blue-500"; // Decent (2000+ms)
-  };
-
-  const getLatencyStatus = (latency: number | null) => {
-    if (latency === null) return "Unknown";
-    if (latency >= 999 && latency < 1000) return "Connection Issues"; // Keep for 999ms special case
-    if (latency <= 1000) return "Excellent";
-    if (latency <= 1500) return "Fair";
-    if (latency <= 2000) return "Good";
-    return "Decent";
-  };
-
-  const getLatencyDotColor = (latency: number | null): string => {
-    if (latency === null) return "rgb(156 163 175)"; // gray
-    if (latency >= 999 && latency < 1000) return "rgb(156 163 175)"; // gray for connection issues
-    if (latency <= 1000) return "rgb(34 197 94)"; // green for excellent
-    if (latency <= 1500) return "rgb(249 115 22)"; // orange for fair
-    if (latency <= 2000) return "rgb(234 179 8)"; // yellow for good
-    return "rgb(59 130 246)"; // blue for decent (2000+ms)
-  };
-
-  // Live latency monitoring function
+  // Live latency monitoring function for Oxylabs
   const checkCurrentServerLatency = async () => {
-    if (!vpnState.isConnected || !vpnState.currentServer.ip) {
-      console.log(`⚠️ [checkCurrentServerLatency] Skipping latency check - not connected or no server IP`, {
-        isConnected: vpnState.isConnected,
-        serverIP: vpnState.currentServer.ip,
-      });
+    if (!vpnState.isConnected || vpnState.currentServer.type !== "oxylabs-residential") {
+      console.log(`⚠️ [checkCurrentServerLatency] Skipping latency check - not connected to Oxylabs`);
       setCurrentLatency(null);
       return;
     }
@@ -362,27 +302,18 @@ export function VPNDropdown({ isOpen, onClose }: VPNDropdownProps) {
     setIsCheckingLatency(true);
 
     try {
-      console.log(
-        `🌐 [checkCurrentServerLatency] Testing latency for ${vpnState.currentServer.ip}:${vpnState.currentServer.port}...`
-      );
+      console.log(`🌐 [checkCurrentServerLatency] Testing Oxylabs latency...`);
 
       const startTime = Date.now();
-      const testResult = await ipcRenderer.invoke("test-proxy-server", {
-        ip: vpnState.currentServer.ip,
-        port: vpnState.currentServer.port,
-        type: "http",
-      });
+      const testResult = await ipcRenderer.invoke("test-proxy-connection");
       const endTime = Date.now();
       const totalTime = endTime - startTime;
 
       if (testResult.success) {
-        // Use the returned ping value or fallback to measured time
-        const latency = testResult.ping || totalTime;
-
         // Add the new measurement to our array
         setLatencyMeasurements((prev) => {
-          const newMeasurements = [...prev, latency];
-          // Keep only the last 10 measurements to prevent memory bloat
+          const newMeasurements = [...prev, totalTime];
+          // Keep only the last 10 measurements
           const trimmedMeasurements = newMeasurements.slice(-10);
 
           // Calculate average of all measurements
@@ -390,12 +321,10 @@ export function VPNDropdown({ isOpen, onClose }: VPNDropdownProps) {
             trimmedMeasurements.reduce((sum, val) => sum + val, 0) / trimmedMeasurements.length
           );
 
-          console.log(`✅ [checkCurrentServerLatency] Latency measurement added:`, {
-            newLatency: latency,
+          console.log(`✅ [checkCurrentServerLatency] Oxylabs latency measurement:`, {
+            newLatency: totalTime,
             measurementCount: trimmedMeasurements.length,
             average: average,
-            allMeasurements: trimmedMeasurements,
-            server: `${vpnState.currentServer.ip}:${vpnState.currentServer.port}`,
           });
 
           // Update the current latency with the average
@@ -404,19 +333,13 @@ export function VPNDropdown({ isOpen, onClose }: VPNDropdownProps) {
           return trimmedMeasurements;
         });
       } else {
-        console.warn(`❌ [checkCurrentServerLatency] Latency test failed:`, {
-          error: testResult.error,
-          server: `${vpnState.currentServer.ip}:${vpnState.currentServer.port}`,
-          totalTime,
-        });
-        // Don't add failed measurements to the array, but set high latency if no measurements exist
+        console.warn(`❌ [checkCurrentServerLatency] Oxylabs latency test failed:`, testResult.message);
         if (latencyMeasurements.length === 0) {
           setCurrentLatency(999);
         }
       }
     } catch (error) {
-      console.error(`💥 [checkCurrentServerLatency] Error testing latency:`, error);
-      // Don't add failed measurements to the array, but set high latency if no measurements exist
+      console.error(`💥 [checkCurrentServerLatency] Error testing Oxylabs latency:`, error);
       if (latencyMeasurements.length === 0) {
         setCurrentLatency(999);
       }
@@ -427,19 +350,19 @@ export function VPNDropdown({ isOpen, onClose }: VPNDropdownProps) {
 
   // Start/stop live latency monitoring
   React.useEffect(() => {
-    if (vpnState.isConnected && isOpen) {
+    if (vpnState.isConnected && isOpen && vpnState.currentServer.type === "oxylabs-residential") {
       // Reset measurements and latency when dropdown opens
-      console.log(`🔄 [VPNDropdown] Dropdown opened, resetting latency measurements`);
+      console.log(`🔄 [VPNDropdown] Dropdown opened, resetting Oxylabs latency measurements`);
       setLatencyMeasurements([]);
       setCurrentLatency(null);
 
       // Initial check immediately
       checkCurrentServerLatency();
 
-      // Set up periodic checking every 3 seconds for more responsive updates
+      // Set up periodic checking every 5 seconds
       const interval = setInterval(() => {
         checkCurrentServerLatency();
-      }, 3000); // Changed from 10000ms to 3000ms
+      }, 5000);
 
       setLatencyInterval(interval);
 
@@ -458,20 +381,7 @@ export function VPNDropdown({ isOpen, onClose }: VPNDropdownProps) {
       setLatencyMeasurements([]);
       setCurrentLatency(null);
     }
-  }, [vpnState.isConnected, isOpen, vpnState.currentServer.ip]);
-
-  // Additional effect to immediately check latency when server changes
-  React.useEffect(() => {
-    if (vpnState.isConnected && vpnState.currentServer.ip && isOpen) {
-      console.log(
-        `🔄 [VPNDropdown] Server changed to ${vpnState.currentServer.ip}, resetting measurements and checking latency immediately`
-      );
-      // Reset measurements when server changes
-      setLatencyMeasurements([]);
-      setCurrentLatency(null);
-      checkCurrentServerLatency();
-    }
-  }, [vpnState.currentServer.id, vpnState.isConnected, isOpen]);
+  }, [vpnState.isConnected, isOpen, vpnState.currentServer.type]);
 
   // Cleanup interval on unmount
   React.useEffect(() => {
@@ -482,76 +392,37 @@ export function VPNDropdown({ isOpen, onClose }: VPNDropdownProps) {
     };
   }, [latencyInterval]);
 
-  const getSignalColor = (strength: number) => {
-    if (strength >= 70) return "rgb(34 197 94)"; // green-500
-    if (strength >= 40) return "rgb(234 179 8)"; // yellow-500
-    return "rgb(239 68 68)"; // red-500
+  const getLatencyColor = (latency: number | null) => {
+    if (latency === null) return "text-gray-400";
+    if (latency >= 999 && latency < 1000) return "text-gray-500";
+    if (latency <= 1000) return "text-green-500";
+    if (latency <= 1500) return "text-orange-500";
+    if (latency <= 2000) return "text-yellow-500";
+    return "text-blue-500";
+  };
+
+  const getLatencyStatus = (latency: number | null) => {
+    if (latency === null) return "Unknown";
+    if (latency >= 999 && latency < 1000) return "Connection Issues";
+    if (latency <= 1000) return "Excellent";
+    if (latency <= 1500) return "Fair";
+    if (latency <= 2000) return "Good";
+    return "Decent";
+  };
+
+  const getLatencyDotColor = (latency: number | null): string => {
+    if (latency === null) return "rgb(156 163 175)";
+    if (latency >= 999 && latency < 1000) return "rgb(156 163 175)";
+    if (latency <= 1000) return "rgb(34 197 94)";
+    if (latency <= 1500) return "rgb(249 115 22)";
+    if (latency <= 2000) return "rgb(234 179 8)";
+    return "rgb(59 130 246)";
   };
 
   const getDropdownWidth = () => {
     if (showServerList) return 800;
     if (showProxyConfig) return 700;
     return 600;
-  };
-
-  const handleQuickSwitch = async () => {
-    if (!vpnState.isConnected || servers.length === 0) {
-      setProxyMessage({ type: "error", text: "No servers available for quick switch" });
-      setTimeout(() => setProxyMessage(null), 3000);
-      return;
-    }
-
-    setIsQuickSwitching(true);
-
-    try {
-      // Get healthy servers (those with ping values) and sort by ping for consistent ordering
-      const healthyServers = servers
-        .filter((server) => server.ping !== null)
-        .sort((a, b) => (a.ping || 0) - (b.ping || 0));
-
-      if (healthyServers.length === 0) {
-        setProxyMessage({ type: "error", text: "No healthy servers available" });
-        setTimeout(() => setProxyMessage(null), 3000);
-        return;
-      }
-
-      if (healthyServers.length === 1) {
-        setProxyMessage({ type: "error", text: "Only one healthy server available" });
-        setTimeout(() => setProxyMessage(null), 3000);
-        return;
-      }
-
-      // Find the current server's index in the healthy servers list
-      const currentServerIndex = healthyServers.findIndex((server) => server.id === vpnState.currentServer.id);
-
-      // If current server is not found in healthy servers, start from the first one
-      // Otherwise, move to the next server (cycling back to the beginning if at the end)
-      let nextServerIndex;
-      if (currentServerIndex === -1) {
-        nextServerIndex = 0;
-      } else {
-        nextServerIndex = (currentServerIndex + 1) % healthyServers.length;
-      }
-
-      const nextServer = healthyServers[nextServerIndex];
-
-      // Switch to the next server
-      await handleServerSelect(nextServer);
-      setProxyMessage({
-        type: "success",
-        text: `Switched to: ${nextServer.country} (${nextServer.ping}ms) - ${nextServerIndex + 1}/${
-          healthyServers.length
-        }`,
-      });
-
-      setTimeout(() => setProxyMessage(null), 3000);
-    } catch (error) {
-      console.error("Failed to quick switch:", error);
-      setProxyMessage({ type: "error", text: "Failed to switch servers" });
-      setTimeout(() => setProxyMessage(null), 3000);
-    } finally {
-      setIsQuickSwitching(false);
-    }
   };
 
   return (
@@ -587,7 +458,7 @@ export function VPNDropdown({ isOpen, onClose }: VPNDropdownProps) {
             <div className="bg-gradient-to-r from-violet-600 to-indigo-600 px-4 py-3">
               <div className="flex items-center justify-between">
                 <h3 className="text-white font-medium">
-                  {showProxyConfig ? "Custom Proxy Configuration" : "VPN Connection"}
+                  {showProxyConfig ? "Custom Proxy Configuration" : "Oxylabs VPN Connection"}
                 </h3>
                 <motion.div
                   animate={{
@@ -614,7 +485,7 @@ export function VPNDropdown({ isOpen, onClose }: VPNDropdownProps) {
                   exit={{ opacity: 0, x: -50 }}
                 >
                   <div className="flex items-center justify-between px-4 py-2 border-b border-gray-200">
-                    <h4 className="font-medium text-gray-700">Select Server</h4>
+                    <h4 className="font-medium text-gray-700">Configure Oxylabs</h4>
                     <button
                       onClick={() => setShowServerList(false)}
                       className="p-1 hover:bg-gray-100 rounded-full transition-colors"
@@ -697,7 +568,7 @@ export function VPNDropdown({ isOpen, onClose }: VPNDropdownProps) {
                           type="text"
                           value={proxyConfig.host}
                           onChange={(e) => updateProxyConfig({ host: e.target.value })}
-                          placeholder="127.0.0.1"
+                          placeholder="pr.oxylabs.io"
                           className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-violet-500 focus:border-transparent"
                         />
                       </div>
@@ -706,8 +577,8 @@ export function VPNDropdown({ isOpen, onClose }: VPNDropdownProps) {
                         <input
                           type="number"
                           value={proxyConfig.port}
-                          onChange={(e) => updateProxyConfig({ port: parseInt(e.target.value) || 1080 })}
-                          placeholder="1080"
+                          onChange={(e) => updateProxyConfig({ port: parseInt(e.target.value) || 7777 })}
+                          placeholder="7777"
                           className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-violet-500 focus:border-transparent"
                         />
                       </div>
@@ -811,30 +682,8 @@ export function VPNDropdown({ isOpen, onClose }: VPNDropdownProps) {
                     </motion.span>
                   </div>
 
-                  {/* Auto-Switch Status */}
-                  {proxyMessage?.text.includes("Auto-Switched") && (
-                    <motion.div
-                      initial={{ opacity: 0, y: -10 }}
-                      animate={{ opacity: 1, y: 0 }}
-                      exit={{ opacity: 0, y: -10 }}
-                      className="flex items-center justify-between mb-4 p-2 bg-blue-50 rounded-lg border border-blue-200"
-                    >
-                      <div className="flex items-center">
-                        <motion.div
-                          animate={{ scale: [1, 1.2, 1] }}
-                          transition={{ duration: 2, repeat: Infinity, ease: "easeInOut" }}
-                          className="mr-2"
-                        >
-                          <FiCheck className="w-4 h-4 text-blue-600" />
-                        </motion.div>
-                        <span className="text-sm font-medium text-blue-700">Server Auto-Switched</span>
-                      </div>
-                      <div className="text-xs text-blue-600">Connection Recovered</div>
-                    </motion.div>
-                  )}
-
                   {/* Live Latency */}
-                  {vpnState.isConnected && (
+                  {vpnState.isConnected && vpnState.currentServer.type === "oxylabs-residential" && (
                     <div className="space-y-4 mb-4">
                       <div className="flex items-center justify-between">
                         <span className="text-gray-600">Live Latency</span>
@@ -880,21 +729,46 @@ export function VPNDropdown({ isOpen, onClose }: VPNDropdownProps) {
 
                       {/* Server Info */}
                       <div className="flex items-center justify-between">
-                        <span className="text-gray-600">Server</span>
+                        <span className="text-gray-600">Location</span>
                         <span className="font-medium text-gray-800">
                           {vpnState.currentServer.city}, {vpnState.currentServer.country}
                         </span>
                       </div>
 
-                      {/* IP Address */}
+                      {/* Proxy Endpoint */}
                       <div className="flex items-center justify-between">
-                        <span className="text-gray-600">IP Address</span>
+                        <span className="text-gray-600">Proxy Endpoint</span>
                         <span className="font-medium text-gray-800">
                           {vpnState.currentServer.ip}:{vpnState.currentServer.port}
                         </span>
                       </div>
                     </div>
                   )}
+
+                  {/* Message Display */}
+                  <AnimatePresence>
+                    {proxyMessage && (
+                      <motion.div
+                        initial={{ opacity: 0, y: -10 }}
+                        animate={{ opacity: 1, y: 0 }}
+                        exit={{ opacity: 0, y: -10 }}
+                        className={`mb-4 p-3 rounded-lg ${
+                          proxyMessage.type === "success"
+                            ? "bg-green-50 text-green-700 border border-green-200"
+                            : "bg-red-50 text-red-700 border border-red-200"
+                        }`}
+                      >
+                        <div className="flex items-center">
+                          {proxyMessage.type === "success" ? (
+                            <FiCheck className="w-4 h-4 mr-2" />
+                          ) : (
+                            <FiX className="w-4 h-4 mr-2" />
+                          )}
+                          {proxyMessage.text}
+                        </div>
+                      </motion.div>
+                    )}
+                  </AnimatePresence>
 
                   {/* Information Section */}
                   <motion.div
@@ -907,23 +781,23 @@ export function VPNDropdown({ isOpen, onClose }: VPNDropdownProps) {
                       <div className="space-y-3">
                         <div>
                           <h4 className="text-sm font-semibold text-blue-800 mb-1 flex items-center">
-                            <FiClock className="w-4 h-4 mr-1" />
-                            Automated Server Discovery
+                            <FiShield className="w-4 h-4 mr-1" />
+                            Premium Residential Network
                           </h4>
                           <p className="text-xs text-blue-700 leading-relaxed">
-                            Our service automatically discovers and tests new proxy servers every 10 minutes, ensuring
-                            you always have access to the fastest and most reliable connections.
+                            Oxylabs provides access to millions of residential IP addresses worldwide with high success
+                            rates and automatic rotation.
                           </p>
                         </div>
 
                         <div className="border-t border-blue-200 pt-3">
                           <h4 className="text-sm font-semibold text-blue-800 mb-1 flex items-center">
-                            <FiShield className="w-4 h-4 mr-1" />
-                            Privacy Recommendation
+                            <FiMapPin className="w-4 h-4 mr-1" />
+                            Country Targeting
                           </h4>
                           <p className="text-xs text-blue-700 leading-relaxed">
-                            For maximum anonymity, we recommend switching servers periodically. This prevents tracking
-                            and maintains your privacy across different sessions.
+                            Your connection is routed through residential proxies in your selected country for optimal
+                            geo-targeting and performance.
                           </p>
                         </div>
                       </div>
@@ -968,31 +842,13 @@ export function VPNDropdown({ isOpen, onClose }: VPNDropdownProps) {
                       )}
                     </button>
 
-                    {vpnState.isConnected && (
-                      <button
-                        onClick={() => setShowServerList(true)}
-                        className="w-full py-2 px-4 rounded-lg font-medium border border-violet-200 text-violet-600 hover:bg-violet-50 transition-colors flex items-center justify-center"
-                      >
-                        <FiRefreshCw className="w-4 h-4 mr-2" />
-                        Switch Server
-                      </button>
-                    )}
-
-                    {/* Quick Switch Button */}
-                    {vpnState.isConnected && servers.length > 0 && (
-                      <button
-                        onClick={handleQuickSwitch}
-                        disabled={isQuickSwitching}
-                        className="w-full py-2 px-4 rounded-lg font-medium border border-green-200 text-green-600 hover:bg-green-50 transition-colors flex items-center justify-center disabled:opacity-50"
-                      >
-                        {isQuickSwitching ? (
-                          <FiRefreshCw className="w-4 h-4 mr-2 animate-spin" />
-                        ) : (
-                          <FiActivity className="w-4 h-4 mr-2" />
-                        )}
-                        {isQuickSwitching ? "Switching..." : "Quick Switch (Best Latency)"}
-                      </button>
-                    )}
+                    <button
+                      onClick={() => setShowServerList(true)}
+                      className="w-full py-2 px-4 rounded-lg font-medium border border-violet-200 text-violet-600 hover:bg-violet-50 transition-colors flex items-center justify-center"
+                    >
+                      <FiSettings className="w-4 h-4 mr-2" />
+                      Configure Oxylabs
+                    </button>
 
                     {/* Custom Proxy Configuration Button */}
                     <button
@@ -1000,7 +856,7 @@ export function VPNDropdown({ isOpen, onClose }: VPNDropdownProps) {
                       className="w-full py-2 px-4 rounded-lg font-medium border border-gray-200 text-gray-600 hover:bg-gray-50 transition-colors flex items-center justify-center"
                     >
                       <FiSettings className="w-4 h-4 mr-2" />
-                      Custom Proxy Settings
+                      Advanced Proxy Settings
                     </button>
                   </div>
                 </motion.div>

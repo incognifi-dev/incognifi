@@ -12,7 +12,7 @@ let networkBaseline: any = null;
 let lastNetworkStats: any = null;
 let sessionStartTime: number = 0;
 
-// Proxy state
+// Proxy state - Updated for Oxylabs
 interface ProxyConfig {
   enabled: boolean;
   host: string;
@@ -20,6 +20,13 @@ interface ProxyConfig {
   username?: string;
   password?: string;
   type: "socks5" | "socks4" | "http";
+}
+
+interface OxylabsConfig {
+  customerId: string;
+  password: string;
+  countryCode: string;
+  sessionId?: string;
 }
 
 // Load proxy config from storage or use defaults
@@ -38,10 +45,40 @@ function loadProxyConfig(): ProxyConfig {
 
   return {
     enabled: false,
-    host: "127.0.0.1",
-    port: 1080,
-    type: "socks5",
+    host: "pr.oxylabs.io",
+    port: 7777,
+    type: "http",
   };
+}
+
+// Load Oxylabs config from storage
+function loadOxylabsConfig(): OxylabsConfig | null {
+  try {
+    const stored = app.getPath("userData");
+    const configPath = path.join(stored, "oxylabs-config.json");
+
+    if (fs.existsSync(configPath)) {
+      const data = fs.readFileSync(configPath, "utf8");
+      return JSON.parse(data);
+    }
+  } catch (error) {
+    console.error("Failed to load Oxylabs config:", error);
+  }
+
+  return null;
+}
+
+// Save Oxylabs config to storage
+function saveOxylabsConfig(config: OxylabsConfig) {
+  try {
+    const stored = app.getPath("userData");
+    const configPath = path.join(stored, "oxylabs-config.json");
+
+    fs.writeFileSync(configPath, JSON.stringify(config, null, 2));
+    console.log("Oxylabs config saved:", { ...config, password: "***" });
+  } catch (error) {
+    console.error("Failed to save Oxylabs config:", error);
+  }
 }
 
 // Save proxy config to storage
@@ -51,7 +88,7 @@ function saveProxyConfig(config: ProxyConfig) {
     const configPath = path.join(stored, "proxy-config.json");
 
     fs.writeFileSync(configPath, JSON.stringify(config, null, 2));
-    console.log("Proxy config saved:", config);
+    console.log("Proxy config saved:", { ...config, password: config.password ? "***" : undefined });
   } catch (error) {
     console.error("Failed to save proxy config:", error);
   }
@@ -169,62 +206,102 @@ async function getNetworkStats() {
   }
 }
 
-// Function to configure proxy for webview sessions
-async function configureProxy(config: ProxyConfig) {
-  console.log("Configuring proxy with config:", config);
+// Function to update webview session proxy for runtime changes
+async function updateWebviewProxy(config: ProxyConfig) {
+  console.log("Updating webview proxy with config:", { ...config, password: config.password ? "***" : undefined });
   const webviewSession = session.fromPartition("persist:webview");
 
-  if (config.enabled) {
-    let proxyRules = "";
-
-    if (config.username && config.password) {
-      // For authenticated proxies
-      proxyRules =
-        config.type === "socks5"
-          ? `socks5://${config.username}:${config.password}@${config.host}:${config.port}`
-          : config.type === "socks4"
-          ? `socks4://${config.username}:${config.password}@${config.host}:${config.port}`
-          : `http://${config.username}:${config.password}@${config.host}:${config.port}`;
-    } else {
-      // For non-authenticated proxies
-      proxyRules =
-        config.type === "socks5"
-          ? `socks5://${config.host}:${config.port}`
-          : config.type === "socks4"
-          ? `socks4://${config.host}:${config.port}`
-          : `http://${config.host}:${config.port}`;
-    }
-
+  if (config.enabled && config.username && config.password) {
     try {
+      // Clear any cached authentication data to force re-authentication
+      console.log("Clearing webview session auth cache before proxy update");
+      await webviewSession.clearAuthCache();
+
+      // Clear any cached proxy authentication specifically
+      await webviewSession.clearHostResolverCache();
+
+      // Use both HTTP and HTTPS proxy rules for complete coverage
+      const proxyRules = `http=${config.host}:${config.port};https=${config.host}:${config.port}`;
+
+      console.log("Setting webview proxy rules:", proxyRules);
+      console.log("Proxy username:", config.username);
+
       await webviewSession.setProxy({
         proxyRules: proxyRules,
-        proxyBypassRules: "localhost,127.0.0.1,::1",
+        proxyBypassRules: "localhost,127.0.0.1,::1,<local>",
       });
 
-      console.log(`Proxy configured successfully: ${proxyRules}`);
-      return { success: true, message: `Proxy enabled: ${config.type}://${config.host}:${config.port}` };
+      // Additional step: Clear any cached connections to force new authentication
+      console.log("Clearing cache to ensure new proxy credentials are used");
+      await webviewSession.clearCache();
+
+      console.log(`Webview proxy updated successfully: ${config.host}:${config.port} with authentication`);
+      return { success: true, message: `Proxy updated: ${config.host}:${config.port}` };
     } catch (error) {
-      console.error("Failed to configure proxy:", error);
+      console.error("Failed to update webview proxy:", error);
       return {
         success: false,
-        message: "Failed to configure proxy: " + (error instanceof Error ? error.message : String(error)),
+        message: "Failed to update proxy: " + (error instanceof Error ? error.message : String(error)),
       };
     }
   } else {
     try {
+      console.log("Disabling webview proxy by setting direct connection");
+
+      // Clear cached data when disabling proxy
+      await webviewSession.clearAuthCache();
+      await webviewSession.clearHostResolverCache();
+
       await webviewSession.setProxy({
         proxyRules: "direct://",
       });
 
-      console.log("Proxy disabled successfully");
+      console.log("Webview proxy disabled successfully");
       return { success: true, message: "Proxy disabled" };
     } catch (error) {
-      console.error("Failed to disable proxy:", error);
+      console.error("Failed to disable webview proxy:", error);
       return {
         success: false,
         message: "Failed to disable proxy: " + (error instanceof Error ? error.message : String(error)),
       };
     }
+  }
+}
+
+// Initialize proxy at app startup if Oxylabs config exists
+function initializeAppProxy() {
+  const savedOxylabsConfig = loadOxylabsConfig();
+  if (savedOxylabsConfig) {
+    console.log("Initializing Oxylabs proxy at app startup...");
+
+    // Build Oxylabs username
+    let username = `customer-${savedOxylabsConfig.customerId}-cc-${savedOxylabsConfig.countryCode}`;
+    if (savedOxylabsConfig.sessionId && savedOxylabsConfig.sessionId.trim() !== "") {
+      username += `-session-${savedOxylabsConfig.sessionId}`;
+    }
+
+    // Set proxy at Chromium command line level
+    const proxyUrl = `http://pr.oxylabs.io:7777`;
+    const proxyConfig = `http=${proxyUrl};https=${proxyUrl}`;
+
+    console.log("Setting proxy via command line:", proxyConfig);
+    console.log("Proxy username:", username);
+
+    app.commandLine.appendSwitch("proxy-server", proxyConfig);
+
+    // Update current proxy config for authentication
+    currentProxyConfig = {
+      enabled: true,
+      host: "pr.oxylabs.io",
+      port: 7777,
+      type: "http",
+      username: username,
+      password: savedOxylabsConfig.password,
+    };
+
+    console.log("Oxylabs proxy initialized via command line");
+  } else {
+    console.log("No Oxylabs config found, no proxy set");
   }
 }
 
@@ -251,6 +328,42 @@ function createWindow() {
 
   // Hide the menu bar completely on all platforms
   Menu.setApplicationMenu(null);
+
+  // Set up proxy authentication handler
+  app.on("login", (event, webContents, request, authInfo, callback) => {
+    console.log("🔐 [Auth Handler] Authentication requested:", {
+      isProxy: authInfo.isProxy,
+      host: authInfo.host,
+      port: authInfo.port,
+      scheme: authInfo.scheme,
+      realm: authInfo.realm,
+    });
+
+    if (authInfo.isProxy && currentProxyConfig.enabled && currentProxyConfig.username && currentProxyConfig.password) {
+      console.log(`🔑 [Auth Handler] Providing proxy credentials for: ${authInfo.host}`);
+      console.log(`👤 [Auth Handler] Using username: ${currentProxyConfig.username}`);
+      console.log(
+        `🌍 [Auth Handler] Country from username: ${
+          currentProxyConfig.username.includes("-cc-")
+            ? currentProxyConfig.username.split("-cc-")[1].split("-")[0]
+            : "Unknown"
+        }`
+      );
+
+      event.preventDefault();
+      callback(currentProxyConfig.username, currentProxyConfig.password);
+
+      console.log(`✅ [Auth Handler] Credentials provided successfully`);
+    } else {
+      console.log("❌ [Auth Handler] No proxy credentials available or not a proxy auth request");
+      console.log(`🔍 [Auth Handler] Current proxy config:`, {
+        enabled: currentProxyConfig.enabled,
+        hasUsername: !!currentProxyConfig.username,
+        hasPassword: !!currentProxyConfig.password,
+        isProxyRequest: authInfo.isProxy,
+      });
+    }
+  });
 
   // Show window when ready to prevent white screen
   mainWindow.once("ready-to-show", () => {
@@ -300,123 +413,207 @@ function createWindow() {
     return await getNetworkStats();
   });
 
-  // Set up IPC handlers for proxy management
+  // Set up IPC handlers for Oxylabs management
+  ipcMain.handle("get-oxylabs-config", async () => {
+    console.log("Getting Oxylabs config");
+    return loadOxylabsConfig();
+  });
+
+  ipcMain.handle("save-oxylabs-config", async (event, config: OxylabsConfig) => {
+    console.log("Saving Oxylabs config:", { ...config, password: "***" });
+
+    try {
+      // Save the configuration
+      saveOxylabsConfig(config);
+
+      // Build Oxylabs username for current config
+      let username = `customer-${config.customerId}-cc-${config.countryCode}`;
+      if (config.sessionId && config.sessionId.trim() !== "") {
+        username += `-session-${config.sessionId}`;
+      }
+
+      console.log(`🔄 [save-oxylabs-config] Building new proxy config with username: ${username}`);
+
+      // Update current proxy config FIRST - this is critical for the authentication handler
+      const newProxyConfig: ProxyConfig = {
+        enabled: true,
+        host: "pr.oxylabs.io",
+        port: 7777,
+        type: "http",
+        username: username,
+        password: config.password,
+      };
+
+      // Update global proxy config before webview update
+      currentProxyConfig = newProxyConfig;
+      saveProxyConfig(currentProxyConfig);
+
+      console.log(`✅ [save-oxylabs-config] Updated global proxy config for country: ${config.countryCode}`);
+      console.log(`🔑 [save-oxylabs-config] Authentication will use username: ${username}`);
+
+      // Add a small delay to ensure the authentication handler has the updated config
+      await new Promise((resolve) => setTimeout(resolve, 100));
+
+      // Now update the webview proxy
+      console.log(`🌐 [save-oxylabs-config] Updating webview proxy for ${config.countryCode}...`);
+      const result = await updateWebviewProxy(newProxyConfig);
+
+      if (result.success) {
+        console.log(`✅ [save-oxylabs-config] Webview proxy updated successfully for ${config.countryCode}`);
+        return {
+          success: true,
+          message: `Successfully switched to ${config.countryCode} - Oxylabs configuration saved and proxy updated!`,
+        };
+      } else {
+        console.error(`❌ [save-oxylabs-config] Failed to update webview proxy:`, result.message);
+        return {
+          success: false,
+          message: `Configuration saved but failed to update proxy: ${result.message}`,
+        };
+      }
+    } catch (error) {
+      console.error("Failed to save Oxylabs config:", error);
+      return {
+        success: false,
+        message: "Failed to save Oxylabs configuration: " + (error instanceof Error ? error.message : String(error)),
+      };
+    }
+  });
+
+  ipcMain.handle("test-oxylabs-connection", async (event, config: OxylabsConfig) => {
+    console.log("Testing Oxylabs connection for:", { ...config, password: "***" });
+
+    try {
+      // Build Oxylabs username
+      let username = `customer-${config.customerId}-cc-${config.countryCode}`;
+      if (config.sessionId && config.sessionId.trim() !== "") {
+        username += `-session-${config.sessionId}`;
+      }
+
+      const axiosConfig = {
+        timeout: 15000,
+        proxy: {
+          protocol: "http",
+          host: "pr.oxylabs.io",
+          port: 7777,
+          auth: {
+            username: username,
+            password: config.password,
+          },
+        },
+      };
+
+      console.log("Testing connection with username:", username);
+
+      // Test the connection by fetching IP info
+      const response = await axios.get("https://ip.oxylabs.io/location", axiosConfig);
+
+      if (response.status === 200 && response.data) {
+        console.log("✅ Oxylabs connection test successful:", response.data);
+        return {
+          success: true,
+          ip: response.data.ip || "Unknown",
+          location: response.data.country || response.data.location || "Unknown",
+          message: "Connection successful!",
+        };
+      } else {
+        console.warn("❌ Oxylabs connection test failed - unexpected response");
+        return {
+          success: false,
+          message: "Unexpected response from Oxylabs",
+        };
+      }
+    } catch (error) {
+      console.error("💥 Oxylabs connection test failed:", error);
+
+      if (axios.isAxiosError(error)) {
+        if (error.response?.status === 407) {
+          return {
+            success: false,
+            message: "Authentication failed - please check your credentials",
+          };
+        } else if (error.response?.status === 403) {
+          return {
+            success: false,
+            message: "Access forbidden - please check your account permissions",
+          };
+        } else if (error.code === "ECONNREFUSED") {
+          return {
+            success: false,
+            message: "Connection refused - unable to reach Oxylabs proxy server",
+          };
+        } else if (error.code === "ETIMEDOUT") {
+          return {
+            success: false,
+            message: "Connection timeout - please try again",
+          };
+        }
+      }
+
+      return {
+        success: false,
+        message: error instanceof Error ? error.message : "Unknown connection error",
+      };
+    }
+  });
+
+  // Update existing proxy handlers to work with new system
   ipcMain.handle("get-proxy-config", async () => {
-    console.log("Getting proxy config:", currentProxyConfig);
+    console.log("Getting proxy config:", {
+      ...currentProxyConfig,
+      password: currentProxyConfig.password ? "***" : undefined,
+    });
     return currentProxyConfig;
   });
 
   ipcMain.handle("set-proxy-config", async (event, config: ProxyConfig) => {
-    console.log("Setting proxy config:", config);
-    console.log("Previous config was:", currentProxyConfig);
+    console.log("Setting proxy config:", { ...config, password: config.password ? "***" : undefined });
     currentProxyConfig = { ...config };
     saveProxyConfig(currentProxyConfig);
-    const result = await configureProxy(currentProxyConfig);
-    console.log("Proxy configuration result:", result);
-    console.log("New current config is:", currentProxyConfig);
+
+    // Immediately update the webview proxy
+    const result = await updateWebviewProxy(currentProxyConfig);
     return result;
   });
 
   ipcMain.handle("toggle-proxy", async () => {
     console.log("Toggling proxy. Current state:", currentProxyConfig.enabled);
-    console.log("Current config before toggle:", currentProxyConfig);
     currentProxyConfig.enabled = !currentProxyConfig.enabled;
     saveProxyConfig(currentProxyConfig);
-    const result = await configureProxy(currentProxyConfig);
-    console.log("Proxy toggle result:", result, "New state:", currentProxyConfig.enabled);
-    console.log("Final config after toggle:", currentProxyConfig);
-    return { ...result, enabled: currentProxyConfig.enabled };
+
+    // Immediately update the webview proxy
+    const result = await updateWebviewProxy(currentProxyConfig);
+    return {
+      ...result,
+      enabled: currentProxyConfig.enabled,
+    };
   });
 
   ipcMain.handle("test-proxy-connection", async () => {
-    // Basic proxy connection test
+    // Test current proxy configuration
     try {
-      const testSession = session.fromPartition("test-proxy");
-      if (currentProxyConfig.enabled) {
-        const proxyRules =
-          currentProxyConfig.type === "socks5"
-            ? `socks5://${currentProxyConfig.host}:${currentProxyConfig.port}`
-            : currentProxyConfig.type === "socks4"
-            ? `socks4://${currentProxyConfig.host}:${currentProxyConfig.port}`
-            : `http://${currentProxyConfig.host}:${currentProxyConfig.port}`;
+      if (currentProxyConfig.enabled && currentProxyConfig.username && currentProxyConfig.password) {
+        // Test Oxylabs connection
+        const axiosConfig = {
+          timeout: 15000,
+          proxy: {
+            protocol: currentProxyConfig.type,
+            host: currentProxyConfig.host,
+            port: currentProxyConfig.port,
+            auth: {
+              username: currentProxyConfig.username,
+              password: currentProxyConfig.password,
+            },
+          },
+        };
 
-        await testSession.setProxy({
-          proxyRules: proxyRules,
-        });
+        await axios.get("https://ip.oxylabs.io/location", axiosConfig);
+        return { success: true, message: "Proxy connection successful" };
+      } else {
+        return { success: false, message: "No proxy configuration found" };
       }
-
-      return { success: true, message: "Proxy connection successful" };
     } catch (error) {
       return { success: false, message: "Proxy connection failed" };
-    }
-  });
-
-  // Test a specific proxy server by trying to fetch a test website through it
-  ipcMain.handle("test-proxy-server", async (event, proxyServer: { ip: string; port: number; type?: string }) => {
-    try {
-      const proxyType = proxyServer.type || "http";
-      const startTime = Date.now();
-
-      // Configure axios with proxy settings
-      const axiosConfig = {
-        timeout: 15000, // 5 second timeout
-        proxy: false, // Disable default proxy to use our custom proxy
-        httpsAgent: false,
-        httpAgent: false,
-      } as any;
-
-      // Configure proxy based on type
-      if (proxyType === "http") {
-        axiosConfig.proxy = {
-          protocol: "http",
-          host: proxyServer.ip,
-          port: proxyServer.port,
-        };
-      } else if (proxyType === "socks5" || proxyType === "socks4") {
-        // For SOCKS proxies, we need to use a different approach
-        // Since axios doesn't directly support SOCKS, we'll use a simpler HTTP test
-        // This is a limitation but much more lightweight than BrowserWindow
-        axiosConfig.proxy = {
-          protocol: "http", // Fallback to HTTP test even for SOCKS proxies
-          host: proxyServer.ip,
-          port: proxyServer.port,
-        };
-      }
-
-      try {
-        // Try to fetch a simple test endpoint through the proxy
-        await axios.get("https://httpbin.org/ip", axiosConfig);
-
-        const endTime = Date.now();
-        const ping = endTime - startTime;
-
-        console.log(
-          `✅ [test-proxy-server] Proxy test successful for ${proxyServer.ip}:${proxyServer.port} - ${ping}ms`
-        );
-        return { success: true, ping, error: null };
-      } catch (error) {
-        const endTime = Date.now();
-        const ping = endTime - startTime;
-
-        // If the request failed, it could be due to proxy issues or network issues
-        // We'll still return the timing information for failed requests
-        console.warn(
-          `❌ [test-proxy-server] Proxy test failed for ${proxyServer.ip}:${proxyServer.port}:`,
-          error instanceof Error ? error.message : String(error)
-        );
-        return {
-          success: false,
-          ping: null,
-          error: error instanceof Error ? error.message : String(error),
-        };
-      }
-    } catch (error) {
-      console.error(`💥 [test-proxy-server] Error testing proxy ${proxyServer.ip}:${proxyServer.port}:`, error);
-      return {
-        success: false,
-        ping: null,
-        error: error instanceof Error ? error.message : String(error),
-      };
     }
   });
 
@@ -505,17 +702,12 @@ function createWindow() {
     }
   }
 
-  // Initialize proxy configuration if it was previously enabled
-  if (currentProxyConfig.enabled) {
-    console.log("Initializing proxy with saved config...");
-    configureProxy(currentProxyConfig).then((result) => {
-      console.log("Proxy initialization result:", result);
-    });
-  }
-
   // DevTools can be opened manually via the menu if needed for debugging
   // mainWindow.webContents.openDevTools();
 }
+
+// Call proxy initialization before app ready
+initializeAppProxy();
 
 app.whenReady().then(() => {
   createWindow();
@@ -536,14 +728,16 @@ app.on("window-all-closed", () => {
   }
 });
 
-// Clean up IPC handlers when app is quitting
+// Clean up IPC handlers when app is quitting - Updated
 app.on("before-quit", () => {
   ipcMain.removeAllListeners("clear-storage");
   ipcMain.removeAllListeners("get-network-stats");
+  ipcMain.removeAllListeners("get-oxylabs-config");
+  ipcMain.removeAllListeners("save-oxylabs-config");
+  ipcMain.removeAllListeners("test-oxylabs-connection");
   ipcMain.removeAllListeners("get-proxy-config");
   ipcMain.removeAllListeners("set-proxy-config");
   ipcMain.removeAllListeners("toggle-proxy");
   ipcMain.removeAllListeners("test-proxy-connection");
-  ipcMain.removeAllListeners("test-proxy-server");
   ipcMain.removeAllListeners("refresh-current-tab");
 });
