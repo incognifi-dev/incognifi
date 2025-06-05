@@ -1,6 +1,6 @@
 import { AnimatePresence, motion } from "framer-motion";
-import React, { useEffect, useState } from "react";
-import { FiCheck, FiEye, FiEyeOff, FiMapPin, FiShield, FiSettings, FiRefreshCw, FiGlobe } from "react-icons/fi";
+import { useEffect, useState } from "react";
+import { FiCheck, FiMapPin, FiShield, FiGlobe } from "react-icons/fi";
 
 // Since contextIsolation is false, we can access electron directly
 const { ipcRenderer } = window.require("electron");
@@ -14,7 +14,6 @@ interface OxylabsConfig {
 
 interface ServerListProps {
   onSelect: (server: any) => void;
-  currentServer?: any;
 }
 
 // Common country codes for easy selection
@@ -40,9 +39,7 @@ export function ServerList({ onSelect }: ServerListProps) {
   });
 
   const [isLoading, setIsLoading] = useState(false);
-  const [showPassword, setShowPassword] = useState(false);
   const [message, setMessage] = useState<{ type: "success" | "error"; text: string } | null>(null);
-  const [isTestingConnection, setIsTestingConnection] = useState(false);
 
   // Load saved proxy configuration
   useEffect(() => {
@@ -58,73 +55,6 @@ export function ServerList({ onSelect }: ServerListProps) {
     } catch (error) {
       console.error("Failed to load proxy config:", error);
     }
-  };
-
-  const saveProxyConfig = async () => {
-    setIsLoading(true);
-    setMessage(null);
-
-    try {
-      const result = await ipcRenderer.invoke("save-oxylabs-config", oxylabsConfig);
-
-      if (result.success) {
-        setMessage({ type: "success", text: result.message || "Proxy configuration saved successfully" });
-
-        // Refresh the current tab to use the new proxy immediately
-        await ipcRenderer.invoke("refresh-current-tab");
-
-        // Create a server object for the parent component
-        const residentialServer = {
-          id: "oxylabs-residential",
-          country: COMMON_COUNTRIES.find((c) => c.code === oxylabsConfig.countryCode)?.name || "Unknown",
-          countryCode: oxylabsConfig.countryCode,
-          city: "Residential Pool",
-          ip: "pr.oxylabs.io",
-          port: 7777,
-          ping: null,
-          isHealthy: true,
-          lastChecked: Date.now(),
-          type: "oxylabs-residential",
-          oxylabsConfig,
-        };
-
-        onSelect(residentialServer);
-      } else {
-        setMessage({ type: "error", text: result.message || "Failed to save configuration" });
-      }
-    } catch (error) {
-      setMessage({ type: "error", text: "Failed to save proxy configuration" });
-    } finally {
-      setIsLoading(false);
-      setTimeout(() => setMessage(null), 3000); // Back to normal timeout
-    }
-  };
-
-  const testProxyConnection = async () => {
-    setIsTestingConnection(true);
-    setMessage(null);
-
-    try {
-      const result = await ipcRenderer.invoke("test-oxylabs-connection", oxylabsConfig);
-
-      if (result.success) {
-        setMessage({
-          type: "success",
-          text: `Connection successful! IP: ${result.ip || "Unknown"} | Location: ${result.location || "Unknown"}`,
-        });
-      } else {
-        setMessage({ type: "error", text: result.message || "Connection test failed" });
-      }
-    } catch (error) {
-      setMessage({ type: "error", text: "Failed to test connection" });
-    } finally {
-      setIsTestingConnection(false);
-      setTimeout(() => setMessage(null), 5000);
-    }
-  };
-
-  const updateConfig = (updates: Partial<OxylabsConfig>) => {
-    setOxylabsConfig((prev) => ({ ...prev, ...updates }));
   };
 
   // Quick server selection function

@@ -1,20 +1,6 @@
 import { AnimatePresence, motion } from "framer-motion";
 import React from "react";
-import {
-  FiActivity,
-  FiCheck,
-  FiEye,
-  FiEyeOff,
-  FiRefreshCw,
-  FiSettings,
-  FiWifi,
-  FiWifiOff,
-  FiX,
-  FiInfo,
-  FiClock,
-  FiShield,
-  FiMapPin,
-} from "react-icons/fi";
+import { FiActivity, FiCheck, FiRefreshCw, FiSettings, FiX, FiInfo, FiShield, FiMapPin } from "react-icons/fi";
 import { useVPNStore } from "../stores/vpnStore";
 import { ServerList } from "./ServerList";
 
@@ -41,7 +27,6 @@ export function VPNDropdown({ isOpen, onClose }: VPNDropdownProps) {
 
   const [isLoading, setIsLoading] = React.useState(false);
   const [showServerList, setShowServerList] = React.useState(false);
-  const [showProxyConfig, setShowProxyConfig] = React.useState(false);
   const [hasAutoOpened, setHasAutoOpened] = React.useState(false);
 
   // Proxy configuration state
@@ -51,23 +36,13 @@ export function VPNDropdown({ isOpen, onClose }: VPNDropdownProps) {
     port: 7777,
     type: "http",
   });
-  const [isProxyLoading, setIsProxyLoading] = React.useState(false);
   const [proxyMessage, setProxyMessage] = React.useState<{ type: "success" | "error"; text: string } | null>(null);
-  const [showPassword, setShowPassword] = React.useState(false);
-  const [isTesting, setIsTesting] = React.useState(false);
 
   // Live latency monitoring state
   const [currentLatency, setCurrentLatency] = React.useState<number | null>(null);
   const [latencyMeasurements, setLatencyMeasurements] = React.useState<number[]>([]);
   const [isCheckingLatency, setIsCheckingLatency] = React.useState(false);
   const [latencyInterval, setLatencyInterval] = React.useState<NodeJS.Timeout | null>(null);
-
-  // Load proxy configuration when dropdown opens
-  React.useEffect(() => {
-    if (isOpen && showProxyConfig) {
-      loadProxyConfig();
-    }
-  }, [isOpen, showProxyConfig]);
 
   // Auto-open server list when dropdown first opens
   React.useEffect(() => {
@@ -76,86 +51,6 @@ export function VPNDropdown({ isOpen, onClose }: VPNDropdownProps) {
       setHasAutoOpened(true);
     }
   }, [isOpen, hasAutoOpened]);
-
-  const loadProxyConfig = async () => {
-    try {
-      const currentConfig = await ipcRenderer.invoke("get-proxy-config");
-      setProxyConfig(currentConfig);
-    } catch (error) {
-      console.error("Failed to load proxy config:", error);
-    }
-  };
-
-  const handleProxySave = async () => {
-    setIsProxyLoading(true);
-    setProxyMessage(null);
-
-    try {
-      const result = await ipcRenderer.invoke("set-proxy-config", proxyConfig);
-
-      if (result.success) {
-        setProxyMessage({ type: "success", text: result.message });
-        setTimeout(() => setProxyMessage(null), 3000);
-
-        // Refresh the current tab to use updated proxy settings
-        await ipcRenderer.invoke("refresh-current-tab");
-      } else {
-        setProxyMessage({ type: "error", text: result.message });
-      }
-    } catch (error) {
-      setProxyMessage({ type: "error", text: "Failed to save proxy configuration" });
-    } finally {
-      setIsProxyLoading(false);
-    }
-  };
-
-  const handleProxyToggle = async () => {
-    setIsProxyLoading(true);
-
-    try {
-      await ipcRenderer.invoke("set-proxy-config", proxyConfig);
-      const result = await ipcRenderer.invoke("toggle-proxy");
-      setProxyConfig((prev) => ({ ...prev, enabled: result.enabled }));
-
-      if (result.success) {
-        setProxyMessage({ type: "success", text: result.message });
-        setTimeout(() => setProxyMessage(null), 3000);
-
-        // Refresh the current tab to use new proxy state
-        await ipcRenderer.invoke("refresh-current-tab");
-      } else {
-        setProxyMessage({ type: "error", text: result.message });
-      }
-    } catch (error) {
-      setProxyMessage({ type: "error", text: "Failed to toggle proxy" });
-    } finally {
-      setIsProxyLoading(false);
-    }
-  };
-
-  const handleProxyTest = async () => {
-    setIsTesting(true);
-    setProxyMessage(null);
-
-    try {
-      const result = await ipcRenderer.invoke("test-proxy-connection");
-
-      if (result.success) {
-        setProxyMessage({ type: "success", text: "Proxy connection test successful!" });
-      } else {
-        setProxyMessage({ type: "error", text: "Proxy connection test failed" });
-      }
-    } catch (error) {
-      setProxyMessage({ type: "error", text: "Failed to test proxy connection" });
-    } finally {
-      setIsTesting(false);
-      setTimeout(() => setProxyMessage(null), 3000);
-    }
-  };
-
-  const updateProxyConfig = (updates: Partial<ProxyConfigType>) => {
-    setProxyConfig((prev) => ({ ...prev, ...updates }));
-  };
 
   const toggleConnection = async () => {
     if (vpnState.isConnected) {
@@ -456,9 +351,7 @@ export function VPNDropdown({ isOpen, onClose }: VPNDropdownProps) {
             {/* Header */}
             <div className="bg-gradient-to-r from-violet-600 to-indigo-600 px-4 py-3 flex-shrink-0">
               <div className="flex items-center justify-between">
-                <h3 className="text-white font-medium">
-                  {showProxyConfig ? "Custom Proxy Configuration" : "VPN Connection"}
-                </h3>
+                <h3 className="text-white font-medium">VPN Connection</h3>
                 <div className="flex items-center space-x-2">
                   <motion.div
                     animate={{
@@ -466,11 +359,7 @@ export function VPNDropdown({ isOpen, onClose }: VPNDropdownProps) {
                     }}
                     transition={{ repeat: Infinity, duration: 2 }}
                   >
-                    {showProxyConfig ? (
-                      <FiSettings className="w-5 h-5 text-white" />
-                    ) : (
-                      <FiActivity className={`w-5 h-5 ${vpnState.isConnected ? "text-green-400" : "text-red-400"}`} />
-                    )}
+                    <FiActivity className={`w-5 h-5 ${vpnState.isConnected ? "text-green-400" : "text-red-400"}`} />
                   </motion.div>
                   <button
                     onClick={onClose}
@@ -497,10 +386,7 @@ export function VPNDropdown({ isOpen, onClose }: VPNDropdownProps) {
                       <h4 className="font-medium text-gray-700">Configure VPN</h4>
                     </div>
                     <div className="flex-1 overflow-y-auto">
-                      <ServerList
-                        onSelect={handleServerSelect}
-                        currentServer={vpnState.currentServer}
-                      />
+                      <ServerList onSelect={handleServerSelect} />
                     </div>
                   </motion.div>
                 ) : (
