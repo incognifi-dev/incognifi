@@ -53,7 +53,7 @@ export function ServerList({ onSelect }: ServerListProps) {
         setOxylabsConfig(config);
       }
     } catch (error) {
-      console.error("Failed to load proxy config:", error);
+      // Error handling without console logs
     }
   };
 

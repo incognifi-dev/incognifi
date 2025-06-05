@@ -1,4 +1,4 @@
-import { useEffect, useState } from "react";
+import React, { useState, useEffect } from "react";
 import { FiClock, FiDownload, FiUpload, FiWifi, FiWifiOff } from "react-icons/fi";
 
 // Since contextIsolation is false, we can access electron directly
@@ -26,6 +26,7 @@ export function NetworkStats({ className = "" }: NetworkStatsProps) {
     sessionDuration: 0,
     isConnected: false,
   });
+  const [isVisible, setIsVisible] = useState(true);
 
   useEffect(() => {
     let intervalId: NodeJS.Timeout;
@@ -36,21 +37,31 @@ export function NetworkStats({ className = "" }: NetworkStatsProps) {
         const networkData = await ipcRenderer.invoke("get-network-stats");
         setStats(networkData);
       } catch (error) {
-        console.error("Failed to get network stats:", error);
         setStats((prev) => ({ ...prev, isConnected: false }));
       }
     };
 
-    // Start monitoring
-    getNetworkStats();
-    intervalId = setInterval(getNetworkStats, 1000); // Update every second
+    // Visibility change handler
+    const handleVisibilityChange = () => {
+      setIsVisible(!document.hidden);
+    };
+
+    // Add visibility change listener
+    document.addEventListener("visibilitychange", handleVisibilityChange);
+
+    // Start monitoring only if visible
+    if (isVisible) {
+      getNetworkStats();
+      intervalId = setInterval(getNetworkStats, 3000); // Update every 3 seconds (reduced from 1 second)
+    }
 
     return () => {
       if (intervalId) {
         clearInterval(intervalId);
       }
+      document.removeEventListener("visibilitychange", handleVisibilityChange);
     };
-  }, []);
+  }, [isVisible]);
 
   const formatBytes = (bytes: number): string => {
     if (bytes === 0) return "0 B";

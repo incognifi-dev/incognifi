@@ -80,7 +80,6 @@ export function VPNDropdown({ isOpen, onClose }: VPNDropdownProps) {
         // Immediate disconnect
         setConnectionStatus(false);
       } catch (error) {
-        console.error("Failed to disable proxy:", error);
         setProxyMessage({ type: "error", text: "Failed to disable proxy" });
         // Still disconnect VPN even if proxy disable fails
         setConnectionStatus(false);
@@ -117,7 +116,6 @@ export function VPNDropdown({ isOpen, onClose }: VPNDropdownProps) {
         // Connect VPN
         setConnectionStatus(true);
       } catch (error) {
-        console.error("Failed to enable proxy:", error);
         setProxyMessage({ type: "error", text: "Failed to enable proxy" });
         // Still connect VPN even if proxy enable fails
         await new Promise((resolve) => setTimeout(resolve, 1500));
@@ -137,16 +135,12 @@ export function VPNDropdown({ isOpen, onClose }: VPNDropdownProps) {
 
       try {
         // First, save the configuration to actually update the proxy settings
-        console.log(`🔄 [VPNDropdown] Saving config for server switch to ${server.country}`);
         const saveResult = await ipcRenderer.invoke("save-oxylabs-config", server.oxylabsConfig);
 
         if (!saveResult.success) {
-          console.error(`❌ [VPNDropdown] Failed to save config:`, saveResult.message);
           setProxyMessage({ type: "error", text: `Failed to configure proxy: ${saveResult.message}` });
           return;
         }
-
-        console.log(`✅ [VPNDropdown] Config saved successfully for ${server.country}`);
 
         // Update VPN state with new server info
         setCurrentServer({
@@ -172,13 +166,11 @@ export function VPNDropdown({ isOpen, onClose }: VPNDropdownProps) {
         setTimeout(() => setProxyMessage(null), 3000);
 
         // Refresh the current tab to use the new proxy
-        console.log(`🔄 [VPNDropdown] Refreshing current tab to use new proxy for ${server.country}`);
         await ipcRenderer.invoke("refresh-current-tab");
 
         // Simulate server switch delay
         await new Promise((resolve) => setTimeout(resolve, 1000));
       } catch (error) {
-        console.error("Failed to configure proxy:", error);
         setProxyMessage({ type: "error", text: "Failed to configure proxy" });
       } finally {
         setIsLoading(false);
@@ -189,7 +181,6 @@ export function VPNDropdown({ isOpen, onClose }: VPNDropdownProps) {
   // Live latency monitoring function
   const checkCurrentServerLatency = async () => {
     if (!vpnState.isConnected || vpnState.currentServer.type !== "oxylabs-residential") {
-      console.log(`⚠️ [checkCurrentServerLatency] Skipping latency check - not connected to residential network`);
       setCurrentLatency(null);
       return;
     }
@@ -197,8 +188,6 @@ export function VPNDropdown({ isOpen, onClose }: VPNDropdownProps) {
     setIsCheckingLatency(true);
 
     try {
-      console.log(`🌐 [checkCurrentServerLatency] Testing latency...`);
-
       const startTime = Date.now();
       const testResult = await ipcRenderer.invoke("test-proxy-connection");
       const endTime = Date.now();
@@ -208,19 +197,13 @@ export function VPNDropdown({ isOpen, onClose }: VPNDropdownProps) {
         // Add the new measurement to our array
         setLatencyMeasurements((prev) => {
           const newMeasurements = [...prev, totalTime];
-          // Keep only the last 10 measurements
-          const trimmedMeasurements = newMeasurements.slice(-10);
+          // Keep only the last 5 measurements for efficiency
+          const trimmedMeasurements = newMeasurements.slice(-5);
 
           // Calculate average of all measurements
           const average = Math.round(
             trimmedMeasurements.reduce((sum, val) => sum + val, 0) / trimmedMeasurements.length
           );
-
-          console.log(`✅ [checkCurrentServerLatency] Latency measurement:`, {
-            newLatency: totalTime,
-            measurementCount: trimmedMeasurements.length,
-            average: average,
-          });
 
           // Update the current latency with the average
           setCurrentLatency(average);
@@ -228,13 +211,11 @@ export function VPNDropdown({ isOpen, onClose }: VPNDropdownProps) {
           return trimmedMeasurements;
         });
       } else {
-        console.warn(`❌ [checkCurrentServerLatency] Latency test failed:`, testResult.message);
         if (latencyMeasurements.length === 0) {
           setCurrentLatency(999);
         }
       }
     } catch (error) {
-      console.error(`💥 [checkCurrentServerLatency] Error testing latency:`, error);
       if (latencyMeasurements.length === 0) {
         setCurrentLatency(999);
       }
@@ -247,17 +228,16 @@ export function VPNDropdown({ isOpen, onClose }: VPNDropdownProps) {
   React.useEffect(() => {
     if (vpnState.isConnected && isOpen && vpnState.currentServer.type === "oxylabs-residential") {
       // Reset measurements and latency when dropdown opens
-      console.log(`🔄 [VPNDropdown] Dropdown opened, resetting latency measurements`);
       setLatencyMeasurements([]);
       setCurrentLatency(null);
 
       // Initial check immediately
       checkCurrentServerLatency();
 
-      // Set up periodic checking every 5 seconds
+      // Set up periodic checking every 15 seconds (reduced from 5 seconds)
       const interval = setInterval(() => {
         checkCurrentServerLatency();
-      }, 5000);
+      }, 15000);
 
       setLatencyInterval(interval);
 
@@ -272,7 +252,6 @@ export function VPNDropdown({ isOpen, onClose }: VPNDropdownProps) {
         clearInterval(latencyInterval);
         setLatencyInterval(null);
       }
-      console.log(`🔄 [VPNDropdown] Dropdown closed or disconnected, clearing latency data`);
       setLatencyMeasurements([]);
       setCurrentLatency(null);
     }

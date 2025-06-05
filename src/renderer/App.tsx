@@ -1,5 +1,5 @@
 // Hot reload test - this should trigger a refresh
-import { useState, useRef, useEffect, createRef } from "react";
+import { useState, useRef, useEffect, createRef, useCallback } from "react";
 import type { WebviewTag } from "electron";
 import { NavigationBar } from "./components/NavigationBar";
 import { BookmarksBar } from "./components/BookmarksBar";
@@ -10,7 +10,7 @@ import { ErrorPage } from "./components/ErrorPage";
 import { Bookmark, Tab, HistoryEntry } from "./types";
 import { defaultBookmarks } from "./data/defaultBookmarks";
 import icognifiLogo from "./assets/icognifi-alpha.png";
-import { motion } from "framer-motion";
+import { motion, AnimatePresence } from "framer-motion";
 import {
   ShieldCheckIcon,
   UserGroupIcon,
@@ -21,6 +21,19 @@ import {
 } from "@heroicons/react/24/outline";
 import { useVPNStore } from "./stores/vpnStore";
 import { useServerStore } from "./stores/serverStore";
+
+// Debounce utility function
+const debounce = (func: Function, wait: number) => {
+  let timeout: NodeJS.Timeout;
+  return function executedFunction(...args: any[]) {
+    const later = () => {
+      clearTimeout(timeout);
+      func(...args);
+    };
+    clearTimeout(timeout);
+    timeout = setTimeout(later, wait);
+  };
+};
 
 export default function App() {
   const [tabs, setTabs] = useState<Tab[]>(() => [
@@ -59,9 +72,8 @@ export default function App() {
   const { vpnState } = useVPNStore();
   const { servers } = useServerStore();
 
-  // Auto-switch state management
+  // Auto-switch state management with debouncing
   const [isAutoSwitching, setIsAutoSwitching] = useState(false);
-  const [lastAutoSwitchTime, setLastAutoSwitchTime] = useState(0);
   const [failedServerIds, setFailedServerIds] = useState<Set<string>>(new Set());
 
   const activeTab = tabs.find((tab) => tab.id === activeTabId)!;
@@ -71,15 +83,30 @@ export default function App() {
     webviewRefs.current[activeTabId] = createRef<WebviewTag>();
   }
 
-  // Save bookmarks to localStorage whenever they change
-  useEffect(() => {
-    localStorage.setItem("bookmarks", JSON.stringify(bookmarks));
-  }, [bookmarks]);
+  // Debounced storage functions
+  const debouncedSaveBookmarks = useCallback(
+    debounce((bookmarksToSave: Bookmark[]) => {
+      localStorage.setItem("bookmarks", JSON.stringify(bookmarksToSave));
+    }, 500),
+    []
+  );
 
-  // Save history to localStorage whenever it changes
+  const debouncedSaveHistory = useCallback(
+    debounce((historyToSave: HistoryEntry[]) => {
+      localStorage.setItem("browsing-history", JSON.stringify(historyToSave));
+    }, 1000),
+    []
+  );
+
+  // Save bookmarks to localStorage with debouncing
   useEffect(() => {
-    localStorage.setItem("browsing-history", JSON.stringify(history));
-  }, [history]);
+    debouncedSaveBookmarks(bookmarks);
+  }, [bookmarks, debouncedSaveBookmarks]);
+
+  // Save history to localStorage with debouncing
+  useEffect(() => {
+    debouncedSaveHistory(history);
+  }, [history, debouncedSaveHistory]);
 
   // Add IPC listener for refreshing current tab after server switch
   useEffect(() => {
@@ -540,114 +567,94 @@ export default function App() {
     }
   };
 
-  // Automatic server switching function
-  const handleAutoServerSwitch = async () => {
-    if (!vpnState.isConnected || isAutoSwitching || servers.length === 0) {
-      console.log("⚠️ [AutoSwitch] Skipping auto-switch:", {
-        isConnected: vpnState.isConnected,
-        isAutoSwitching,
-        serverCount: servers.length,
-      });
-      return;
-    }
+  // Debounced automatic server switching function
+  const handleAutoServerSwitch = useCallback(
+    debounce(async () => {
+      if (!vpnState.isConnected || isAutoSwitching || servers.length === 0) {
+        return;
+      }
 
-    // Rate limiting: don't auto-switch more than once every 10 seconds
-    const now = Date.now();
-    if (now - lastAutoSwitchTime < 10000) {
-      console.log("⏳ [AutoSwitch] Rate limited - too soon since last switch");
-      return;
-    }
+      setIsAutoSwitching(true);
 
-    console.log("🔄 [AutoSwitch] Starting automatic server switch due to connection failure");
-    setIsAutoSwitching(true);
-    setLastAutoSwitchTime(now);
+      try {
+        const { ipcRenderer } = window.require("electron");
 
-    try {
-      const { ipcRenderer } = window.require("electron");
+        // Mark current server as failed
+        const currentServerId = vpnState.currentServer.id;
+        setFailedServerIds((prev) => new Set(prev).add(currentServerId));
 
-      // Mark current server as failed
-      const currentServerId = vpnState.currentServer.id;
-      setFailedServerIds((prev) => new Set(prev).add(currentServerId));
-
-      // Get healthy servers that haven't failed recently, sorted by ping
-      const availableServers = servers
-        .filter((server) => server.ping !== null && !failedServerIds.has(server.id) && server.id !== currentServerId)
-        .sort((a, b) => (a.ping || 0) - (b.ping || 0));
-
-      if (availableServers.length === 0) {
-        console.warn("⚠️ [AutoSwitch] No alternative servers available, clearing failed list and retrying");
-        // Reset failed servers list if all are marked as failed
-        setFailedServerIds(new Set());
-
-        // Try with the full server list (excluding current)
-        const fallbackServers = servers
-          .filter((server) => server.ping !== null && server.id !== currentServerId)
+        // Get healthy servers that haven't failed recently, sorted by ping
+        const availableServers = servers
+          .filter((server) => server.ping !== null && !failedServerIds.has(server.id) && server.id !== currentServerId)
           .sort((a, b) => (a.ping || 0) - (b.ping || 0));
 
-        if (fallbackServers.length === 0) {
-          console.error("❌ [AutoSwitch] No working servers found");
-          return;
+        if (availableServers.length === 0) {
+          // Reset failed servers list if all are marked as failed
+          setFailedServerIds(new Set());
+
+          // Try with the full server list (excluding current)
+          const fallbackServers = servers
+            .filter((server) => server.ping !== null && server.id !== currentServerId)
+            .sort((a, b) => (a.ping || 0) - (b.ping || 0));
+
+          if (fallbackServers.length === 0) {
+            return;
+          }
+
+          availableServers.push(...fallbackServers);
         }
 
-        availableServers.push(...fallbackServers);
-      }
+        // Select the best available server (lowest ping)
+        const newServer = availableServers[0];
 
-      // Select the best available server (lowest ping)
-      const newServer = availableServers[0];
-      console.log(
-        `🎯 [AutoSwitch] Switching to server: ${newServer.country} (${newServer.ip}:${newServer.port}, ${newServer.ping}ms)`
-      );
+        // Update VPN state
+        const { setCurrentServer } = useVPNStore.getState();
+        setCurrentServer(newServer);
 
-      // Update VPN state
-      const { setCurrentServer } = useVPNStore.getState();
-      setCurrentServer(newServer);
+        // Update proxy configuration
+        const proxyConfig = {
+          enabled: true,
+          host: newServer.ip,
+          port: newServer.port,
+          type: "http" as const,
+        };
 
-      // Update proxy configuration
-      const proxyConfig = {
-        enabled: true,
-        host: newServer.ip,
-        port: newServer.port,
-        type: "http" as const,
-      };
+        const result = await ipcRenderer.invoke("set-proxy-config", proxyConfig);
 
-      const result = await ipcRenderer.invoke("set-proxy-config", proxyConfig);
+        if (result.success) {
+          // Refresh current tab to use new proxy
+          await ipcRenderer.invoke("refresh-current-tab");
 
-      if (result.success) {
-        console.log(`✅ [AutoSwitch] Successfully switched to ${newServer.country}`);
-
-        // Refresh current tab to use new proxy
-        await ipcRenderer.invoke("refresh-current-tab");
-
-        // Send auto-switch message to VPN dropdown
-        const autoSwitchEvent = new CustomEvent("auto-switch-complete", {
-          detail: {
-            newServer: newServer,
-            message: `Auto-switched to ${newServer.country} due to connection issues`,
-          },
-        });
-        window.dispatchEvent(autoSwitchEvent);
-
-        // Show notification to user
-        if (window.Notification && Notification.permission === "granted") {
-          new Notification("Server Auto-Switched", {
-            body: `Switched to ${newServer.country} due to connection issues`,
-            icon: icognifiLogo,
+          // Send auto-switch message to VPN dropdown
+          const autoSwitchEvent = new CustomEvent("auto-switch-complete", {
+            detail: {
+              newServer: newServer,
+              message: `Auto-switched to ${newServer.country} due to connection issues`,
+            },
           });
-        }
-      } else {
-        console.error("❌ [AutoSwitch] Failed to configure new proxy:", result.message);
-      }
-    } catch (error) {
-      console.error("💥 [AutoSwitch] Error during automatic server switch:", error);
-    } finally {
-      setIsAutoSwitching(false);
+          window.dispatchEvent(autoSwitchEvent);
 
-      // Clear failed servers list after 5 minutes to allow retry
-      setTimeout(() => {
-        setFailedServerIds(new Set());
-      }, 5 * 60 * 1000);
-    }
-  };
+          // Show notification to user
+          if (window.Notification && Notification.permission === "granted") {
+            new Notification("Server Auto-Switched", {
+              body: `Switched to ${newServer.country} due to connection issues`,
+              icon: icognifiLogo,
+            });
+          }
+        }
+      } catch (error) {
+        // Error handling without console logs
+      } finally {
+        setIsAutoSwitching(false);
+
+        // Clear failed servers list after 5 minutes to allow retry
+        setTimeout(() => {
+          setFailedServerIds(new Set());
+        }, 5 * 60 * 1000);
+      }
+    }, 10000), // Debounce auto-switch attempts to max once per 10 seconds
+    [vpnState.isConnected, isAutoSwitching, servers.length, vpnState.currentServer.id, failedServerIds]
+  );
 
   return (
     <div className="flex flex-col h-screen bg-white">

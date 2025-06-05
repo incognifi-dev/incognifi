@@ -170,7 +170,6 @@ class NetworkMonitor {
         };
 
         this.state.sessionStartTime = Date.now();
-        console.log(`Network monitoring initialized for interface: ${primaryStats.iface}`);
       }
     } catch (error) {
       console.error("Failed to initialize network monitoring:", error);
@@ -207,7 +206,6 @@ class NetworkMonitor {
 
       return this.calculateNetworkStats(primaryStats, primaryInterface);
     } catch (error) {
-      console.error("Error getting network stats:", error);
       return defaultStats;
     }
   }
@@ -271,8 +269,6 @@ class ProxyManager {
   }
 
   public async updateWebviewProxy(config: ProxyConfig): Promise<ProxyTestResult> {
-    console.log("Updating webview proxy with config:", { ...config, password: config.password ? "***" : undefined });
-
     const webviewSession = session.fromPartition("persist:webview");
 
     try {
@@ -283,7 +279,6 @@ class ProxyManager {
       }
     } catch (error) {
       const message = error instanceof Error ? error.message : String(error);
-      console.error("Failed to update webview proxy:", error);
       return { success: false, message: `Failed to update proxy: ${message}` };
     }
   }
@@ -293,7 +288,6 @@ class ProxyManager {
     await Promise.all([webviewSession.clearAuthCache(), webviewSession.clearHostResolverCache()]);
 
     const proxyRules = `http=${config.host}:${config.port};https=${config.host}:${config.port}`;
-    console.log("Setting webview proxy rules:", proxyRules);
 
     await webviewSession.setProxy({
       proxyRules,
@@ -303,18 +297,14 @@ class ProxyManager {
     // Clear cache to ensure new credentials are used
     await webviewSession.clearCache();
 
-    console.log(`Webview proxy enabled: ${config.host}:${config.port}`);
     return { success: true, message: `Proxy enabled: ${config.host}:${config.port}` };
   }
 
   private async disableProxy(webviewSession: Electron.Session): Promise<ProxyTestResult> {
-    console.log("Disabling webview proxy");
-
     await Promise.all([webviewSession.clearAuthCache(), webviewSession.clearHostResolverCache()]);
 
     await webviewSession.setProxy({ proxyRules: "direct://" });
 
-    console.log("Webview proxy disabled");
     return { success: true, message: "Proxy disabled" };
   }
 
@@ -322,17 +312,13 @@ class ProxyManager {
     const savedOxylabsConfig = this.state.loadOxylabsConfig();
 
     if (!savedOxylabsConfig) {
-      console.log("No Oxylabs config found, no proxy set");
       return;
     }
-
-    console.log("Initializing Oxylabs proxy at app startup...");
 
     const username = this.buildOxylabsUsername(savedOxylabsConfig);
     const proxyUrl = `http://${OXYLABS_HOST}:${OXYLABS_PORT}`;
     const proxyConfig = `http=${proxyUrl};https=${proxyUrl}`;
 
-    console.log("Setting proxy via command line:", proxyConfig);
     app.commandLine.appendSwitch("proxy-server", proxyConfig);
 
     // Update current proxy config
@@ -344,8 +330,6 @@ class ProxyManager {
       username,
       password: savedOxylabsConfig.password,
     };
-
-    console.log("Oxylabs proxy initialized via command line");
   }
 
   public async testConnection(config?: OxylabsConfig): Promise<ProxyTestResult> {
@@ -367,12 +351,9 @@ class ProxyManager {
         },
       };
 
-      console.log("Testing connection with username:", username);
-
       const response = await axios.get(OXYLABS_API_URL, axiosConfig);
 
       if (response.status === 200 && response.data) {
-        console.log("✅ Connection test successful:", response.data);
         return {
           success: true,
           ip: response.data.ip || "Unknown",
@@ -388,8 +369,6 @@ class ProxyManager {
   }
 
   private handleConnectionError(error: unknown): ProxyTestResult {
-    console.error("💥 Connection test failed:", error);
-
     if (axios.isAxiosError(error)) {
       const status = error.response?.status;
       const code = error.code;
@@ -417,29 +396,11 @@ class ProxyManager {
 // Application setup
 function setupAuthenticationHandler(): void {
   app.on("login", (event, _webContents, _request, authInfo, callback) => {
-    console.log("🔐 [Auth Handler] Authentication requested:", {
-      isProxy: authInfo.isProxy,
-      host: authInfo.host,
-      port: authInfo.port,
-      scheme: authInfo.scheme,
-      realm: authInfo.realm,
-    });
-
     const { currentProxyConfig } = AppState.getInstance();
 
     if (authInfo.isProxy && currentProxyConfig.enabled && currentProxyConfig.username && currentProxyConfig.password) {
-      console.log(`🔑 [Auth Handler] Providing proxy credentials for: ${authInfo.host}`);
-      console.log(`👤 [Auth Handler] Using username: ${currentProxyConfig.username}`);
-
-      const countryMatch = currentProxyConfig.username.match(/-cc-([^-]+)/);
-      const country = countryMatch ? countryMatch[1] : "Unknown";
-      console.log(`🌍 [Auth Handler] Country: ${country}`);
-
       event.preventDefault();
       callback(currentProxyConfig.username, currentProxyConfig.password);
-      console.log(`✅ [Auth Handler] Credentials provided successfully`);
-    } else {
-      console.log("❌ [Auth Handler] No proxy credentials available or not a proxy auth request");
     }
   });
 }
@@ -473,13 +434,10 @@ function setupIpcHandlers(mainWindow: BrowserWindow, networkMonitor: NetworkMoni
   ipcMain.handle("get-oxylabs-config", () => state.loadOxylabsConfig());
 
   ipcMain.handle("save-oxylabs-config", async (_event, config: OxylabsConfig) => {
-    console.log("Saving Oxylabs config:", { ...config, password: "***" });
-
     try {
       state.saveOxylabsConfig(config);
 
       const username = proxyManager.buildOxylabsUsername(config);
-      console.log(`🔄 Building new proxy config with username: ${username}`);
 
       const newProxyConfig: ProxyConfig = {
         enabled: true,
@@ -491,7 +449,6 @@ function setupIpcHandlers(mainWindow: BrowserWindow, networkMonitor: NetworkMoni
       };
 
       state.saveProxyConfig(newProxyConfig);
-      console.log(`✅ Updated global proxy config for country: ${config.countryCode}`);
 
       // Small delay to ensure auth handler has updated config
       await new Promise((resolve) => setTimeout(resolve, 100));
@@ -499,20 +456,17 @@ function setupIpcHandlers(mainWindow: BrowserWindow, networkMonitor: NetworkMoni
       const result = await proxyManager.updateWebviewProxy(newProxyConfig);
 
       if (result.success) {
-        console.log(`✅ Webview proxy updated successfully for ${config.countryCode}`);
         return {
           success: true,
           message: `Successfully switched to ${config.countryCode} - Oxylabs configuration saved and proxy updated!`,
         };
       } else {
-        console.error(`❌ Failed to update webview proxy:`, result.message);
         return {
           success: false,
           message: `Configuration saved but failed to update proxy: ${result.message}`,
         };
       }
     } catch (error) {
-      console.error("Failed to save Oxylabs config:", error);
       const message = error instanceof Error ? error.message : String(error);
       return { success: false, message: `Failed to save Oxylabs configuration: ${message}` };
     }
@@ -530,14 +484,11 @@ function setupIpcHandlers(mainWindow: BrowserWindow, networkMonitor: NetworkMoni
   });
 
   ipcMain.handle("set-proxy-config", async (_event, config: ProxyConfig) => {
-    console.log("Setting proxy config:", { ...config, password: config.password ? "***" : undefined });
     state.saveProxyConfig(config);
     return await proxyManager.updateWebviewProxy(config);
   });
 
   ipcMain.handle("toggle-proxy", async () => {
-    console.log("Toggling proxy. Current state:", state.currentProxyConfig.enabled);
-
     const newConfig = { ...state.currentProxyConfig, enabled: !state.currentProxyConfig.enabled };
     state.saveProxyConfig(newConfig);
 
