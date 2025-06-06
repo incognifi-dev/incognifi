@@ -251,7 +251,11 @@ class ProxyManager {
       await Promise.all([
         webviewSession.clearAuthCache(),
         webviewSession.clearHostResolverCache(),
-        webviewSession.clearCache(),
+        // Clear only specific storages to preserve session cookies that help with Cloudflare
+        webviewSession.clearStorageData({
+          storages: ["websql", "indexdb", "cachestorage"],
+          quotas: ["temporary", "syncable"],
+        }),
       ]);
 
       const proxyRules = `http=${server.endpoint}:${server.port};https=${server.endpoint}:${server.port}`;
@@ -454,15 +458,25 @@ function createWindow(): BrowserWindow {
       nodeIntegration: true,
       contextIsolation: false,
       webviewTag: true,
-      webSecurity: false,
+      webSecurity: true,
       sandbox: false,
-      allowRunningInsecureContent: true,
-      experimentalFeatures: true,
+      allowRunningInsecureContent: false,
+      experimentalFeatures: false,
+      spellcheck: true,
+      session: undefined,
     },
   });
 
   // Hide menu bar completely
   Menu.setApplicationMenu(null);
+
+  // Configure webview session for better Cloudflare compatibility
+  const webviewSession = session.fromPartition("persist:webview");
+
+  // Set a current Chrome user agent for all webview requests
+  const userAgent =
+    "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/134.0.0.0 Safari/537.36";
+  webviewSession.setUserAgent(userAgent);
 
   // Initialize managers
   const networkMonitor = new NetworkMonitor();

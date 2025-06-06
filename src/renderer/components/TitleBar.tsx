@@ -121,18 +121,18 @@ export const TitleBar: React.FC<TitleBarProps> = ({
             )}
           </div>
         ))}
-      </div>
 
-      {/* Controls */}
-      <div className="flex items-center space-x-1 non-draggable">
         {/* New Tab Button */}
         <button
-          className="flex items-center justify-center w-8 h-8 rounded-md text-white hover:bg-white/10 transition-colors"
+          className="flex items-center justify-center w-8 h-8 ml-1 rounded-md text-white hover:bg-white/10 transition-colors"
           onClick={onNewTab}
         >
           <PlusIcon className="w-5 h-5" />
         </button>
+      </div>
 
+      {/* Controls */}
+      <div className="flex items-center space-x-1 non-draggable">
         {/* Settings Button */}
         <div className="relative">
           <button

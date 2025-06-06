@@ -285,6 +285,13 @@ export default function App() {
       const handleNavigate = () => {
         const currentUrl = webview.getURL();
         const currentTitle = webview.getTitle();
+
+        // Don't update state during Cloudflare challenges to avoid navigation interference
+        if (currentUrl && currentUrl.includes("__cf_chl_rt_tk=")) {
+          console.log("Cloudflare challenge detected, avoiding state updates:", currentUrl);
+          return;
+        }
+
         updateTab(activeTabId, {
           url: currentUrl,
           title: currentTitle || "New Tab",
@@ -301,6 +308,14 @@ export default function App() {
       };
 
       const handlePageTitleUpdated = (e: any) => {
+        const currentUrl = webview.getURL();
+
+        // Don't update state during Cloudflare challenges
+        if (currentUrl && currentUrl.includes("__cf_chl_rt_tk=")) {
+          console.log("Cloudflare challenge detected, avoiding title updates:", currentUrl);
+          return;
+        }
+
         updateTab(activeTabId, {
           title: e.title || "New Tab",
           state: activeTab.state === "splash" ? "normal" : activeTab.state === "error" ? "normal" : activeTab.state,
@@ -308,13 +323,19 @@ export default function App() {
         });
 
         // Update history with new title
-        const currentUrl = webview.getURL();
         if (currentUrl && e.title) {
           addToHistory(currentUrl, e.title, activeTab.favicon);
         }
       };
 
       const handlePageFaviconUpdated = (e: any) => {
+        const currentUrl = webview.getURL();
+
+        // Don't update state during Cloudflare challenges
+        if (currentUrl && currentUrl.includes("__cf_chl_rt_tk=")) {
+          return;
+        }
+
         updateTab(activeTabId, {
           favicon: e.favicons[0],
           state: activeTab.state === "splash" ? "normal" : activeTab.state === "error" ? "normal" : activeTab.state,
@@ -325,6 +346,12 @@ export default function App() {
       const handleDomReady = () => {
         const currentTitle = webview.getTitle();
         const currentUrl = webview.getURL();
+
+        // Don't update state during Cloudflare challenges
+        if (currentUrl && currentUrl.includes("__cf_chl_rt_tk=")) {
+          return;
+        }
+
         if (currentTitle || currentUrl) {
           updateTab(activeTabId, {
             title: currentTitle || "New Tab",
@@ -348,10 +375,17 @@ export default function App() {
               : "N/A",
           });
 
+          // Special handling for Cloudflare challenge URLs - don't show errors for these
+          if (event.validatedURL && event.validatedURL.includes("__cf_chl_rt_tk=")) {
+            console.log("Cloudflare challenge navigation detected, completely ignoring error:", event.errorCode);
+            // Don't update any state, don't show error page, let Cloudflare handle it
+            return;
+          }
+
           // Filter out internal Electron errors that shouldn't show error pages
           const ignoredErrorCodes = [
             "GUEST_VIEW_MANAGER_CALL",
-            "ERR_ABORTED", // When user navigates away before page loads
+            "ERR_ABORTED", // When user navigates away before page loads or Cloudflare challenge redirects
             "ERR_FAILED", // Generic failure that's often not user-facing
           ];
 
@@ -382,7 +416,7 @@ export default function App() {
             return;
           }
 
-          // Only show error page for actual navigation/network errors
+          // Only show error page for known user-facing errors or if it's a significant error
           const userFacingErrorCodes = [
             "ERR_CERT_AUTHORITY_INVALID",
             "ERR_CERT_COMMON_NAME_INVALID",
@@ -428,7 +462,6 @@ export default function App() {
       webview.addEventListener("did-start-loading", handleStartLoading);
       webview.addEventListener("did-stop-loading", handleStopLoading);
       webview.addEventListener("did-navigate", handleNavigate);
-      webview.addEventListener("did-navigate-in-page", handleNavigate);
       webview.addEventListener("page-title-updated", handlePageTitleUpdated);
       webview.addEventListener("page-favicon-updated", handlePageFaviconUpdated);
       webview.addEventListener("dom-ready", handleDomReady);
@@ -438,7 +471,6 @@ export default function App() {
         webview.removeEventListener("did-start-loading", handleStartLoading);
         webview.removeEventListener("did-stop-loading", handleStopLoading);
         webview.removeEventListener("did-navigate", handleNavigate);
-        webview.removeEventListener("did-navigate-in-page", handleNavigate);
         webview.removeEventListener("page-title-updated", handlePageTitleUpdated);
         webview.removeEventListener("page-favicon-updated", handlePageFaviconUpdated);
         webview.removeEventListener("dom-ready", handleDomReady);
@@ -878,8 +910,8 @@ export default function App() {
                 className="w-full h-full"
                 partition="persist:webview"
                 allowpopups
-                nodeintegration
-                webpreferences="contextIsolation=false"
+                useragent="Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/134.0.0.0 Safari/537.36"
+                webpreferences="nodeIntegration=false,contextIsolation=false,webSecurity=true"
               />
             </div>
           );

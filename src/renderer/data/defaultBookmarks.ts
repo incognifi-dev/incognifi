@@ -31,4 +31,10 @@ export const defaultBookmarks: Bookmark[] = [
     url: "https://www.coingecko.com",
     favicon: "https://www.coingecko.com/favicon.ico",
   },
+  {
+    id: "dexscreener",
+    title: "Dexscreener",
+    url: "https://dexscreener.com",
+    favicon: "https://dexscreener.com/favicon.ico",
+  },
 ];

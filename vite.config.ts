@@ -30,11 +30,13 @@ export default defineConfig({
     strictPort: true,
     host: "localhost",
     hmr: {
+      protocol: "ws",
+      host: "localhost",
       port: 5173,
     },
     watch: {
-      usePolling: true,
-      interval: 100,
+      // Remove polling - it can cause issues with HMR
+      usePolling: false,
     },
   },
 });

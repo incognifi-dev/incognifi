@@ -6,8 +6,8 @@
   "scripts": {
     "dev": "concurrently -k \"pnpm run dev:react\" \"pnpm run dev:electron\" \"wait-on tcp:5173 && pnpm run start:electron\"",
     "dev:electron": "tsc --project tsconfig.main.json --watch",
-    "dev:react": "vite",
-    "start:electron": "nodemon --watch dist/main --exec electron .",
+    "dev:react": "NODE_ENV=development vite",
+    "start:electron": "NODE_ENV=development nodemon --watch dist/main --exec electron .",
     "build": "tsc --project tsconfig.main.json && vite build",
     "build:app": "npm run build && electron-builder",
     "build:mac": "npm run build && electron-builder --mac",
