@@ -36,10 +36,10 @@ export const TabsBar: React.FC<TabsBarProps> = ({ tabs, activeTabId, onTabClick,
         >
           <img
             src={logoWhite}
-            alt="IcogniFi"
+            alt="IncogniFi"
             className="w-6 h-6 mr-2 object-contain"
           />
-          <span className="text-white font-semibold text-sm">IcogniFi</span>
+          <span className="text-white font-semibold text-sm">IncogniFi</span>
         </div>
 
         <VPNDropdown

@@ -1,5 +1,5 @@
 {
-  "name": "icognifi",
+  "name": "incognifi",
   "version": "1.2.0",
   "description": "Electron-based browser with built-in VPN support",
   "main": "dist/main/main.js",
@@ -54,8 +54,8 @@
     "zustand": "^5.0.5"
   },
   "build": {
-    "appId": "com.icognifi.browser",
-    "productName": "IcogniFi",
+    "appId": "com.incognifi.browser",
+    "productName": "IncogniFi",
     "directories": {
       "output": "release"
     },
@@ -87,7 +87,7 @@
       "allowToChangeInstallationDirectory": true,
       "createDesktopShortcut": true,
       "createStartMenuShortcut": true,
-      "shortcutName": "IcogniFi"
+      "shortcutName": "IncogniFi"
     }
   }
 }

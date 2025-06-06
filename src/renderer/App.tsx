@@ -147,7 +147,7 @@ export default function App() {
 
   const addToHistory = (url: string, title: string, favicon?: string) => {
     // Don't add certain URLs to history
-    if (url === "https://www.google.com" || url.startsWith("icognifi://") || url === "about:blank") {
+    if (url === "https://www.google.com" || url.startsWith("incognifi://") || url === "about:blank") {
       return;
     }
 
@@ -193,7 +193,7 @@ export default function App() {
     const historyTab: Tab = {
       id: Date.now().toString(),
       title: "History",
-      url: "icognifi://history",
+      url: "incognifi://history",
       isLoading: false,
       canGoBack: false,
       canGoForward: false,
@@ -677,7 +677,7 @@ export default function App() {
       {activeTab?.state !== "history" && (
         <>
           <NavigationBar
-            displayUrl={activeTab.state === "splash" ? "icognifi://home" : activeTab.url}
+            displayUrl={activeTab.state === "splash" ? "incognifi://home" : activeTab.url}
             isLoading={activeTab.isLoading}
             canGoBack={activeTab.canGoBack}
             canGoForward={activeTab.canGoForward}
@@ -766,18 +766,18 @@ export default function App() {
                 <div className="flex flex-col items-center justify-center max-w-4xl w-full px-4">
                   <img
                     src={icognifiLogo}
-                    alt="IcogniFi"
+                    alt="IncogniFi"
                     className="w-24 h-24 mb-3 object-contain animate-scale-in animate-delay-200"
                   />
                   <h1 className="text-2xl font-semibold text-violet-900 mb-3 animate-slide-up animate-delay-300">
-                    Welcome to IcogniFi - Privacy Hub
+                    Welcome to IncogniFi - Privacy Hub
                   </h1>
                   <div className="w-full text-center space-y-4">
                     <p className="text-base text-gray-600 animate-fade-in animate-delay-400">
                       Your secure and private browsing experience starts here. Enjoy these features:
                     </p>
                     <p className="text-sm text-violet-600 bg-violet-50 rounded-lg p-2 border border-violet-200 animate-fade-in animate-delay-400">
-                      💡 Tip: Click the IcogniFi logo in the top title bar to access advanced settings and preferences
+                      💡 Tip: Click the IncogniFi logo in the top title bar to access advanced settings and preferences
                     </p>
                     <div className="grid grid-cols-3 gap-4 px-4">
                       <div className="p-4 bg-white rounded-xl shadow-md hover:shadow-lg transition-all hover:scale-105 animate-slide-right animate-delay-500">

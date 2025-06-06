@@ -16,7 +16,7 @@ console.log("Environment variables loaded:", {
 });
 
 // Constants
-const APP_NAME = "IcogniFi";
+const APP_NAME = "IncogniFi";
 const CONNECTION_TIMEOUT = 15000;
 const WINDOW_CONFIG = {
   width: 1200,
