@@ -161,10 +161,6 @@ export function SocialBar() {
               <span className="text-gray-300 text-xs">
                 {vpnState.currentServer.country !== "N/A" ? vpnState.currentServer.country : vpnState.currentServer.ip}
               </span>
-              <span className="text-gray-500 text-xs">•</span>
-              <span className="text-gray-400 text-xs font-mono">
-                {vpnState.currentServer.ip}:{vpnState.currentServer.port}
-              </span>
             </div>
           </div>
         )}
