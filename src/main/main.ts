@@ -485,8 +485,9 @@ function createWindow(): BrowserWindow {
   webviewSession.webRequest.onBeforeSendHeaders((details, callback) => {
     const headers = { ...details.requestHeaders };
     // Ensure proper headers for Cloudflare
-    headers['Accept'] = headers['Accept'] || 'text/html,application/xhtml+xml,application/xml;q=0.9,image/webp,*/*;q=0.8';
-    headers['Accept-Language'] = headers['Accept-Language'] || 'en-US,en;q=0.5';
+    headers["Accept"] =
+      headers["Accept"] || "text/html,application/xhtml+xml,application/xml;q=0.9,image/webp,*/*;q=0.8";
+    headers["Accept-Language"] = headers["Accept-Language"] || "en-US,en;q=0.5";
     callback({ requestHeaders: headers });
   });
 
@@ -502,8 +503,10 @@ function createWindow(): BrowserWindow {
     callback({
       responseHeaders: {
         ...details.responseHeaders,
-        'Content-Security-Policy': ["default-src 'self'; script-src 'self' 'unsafe-inline'; style-src 'self' 'unsafe-inline'; img-src 'self' data: https:; connect-src 'self' https:;"]
-      }
+        "Content-Security-Policy": [
+          "default-src 'self'; script-src 'self' 'unsafe-inline'; style-src 'self' 'unsafe-inline'; img-src 'self' data: https:; connect-src 'self' https:;",
+        ],
+      },
     });
   });
 

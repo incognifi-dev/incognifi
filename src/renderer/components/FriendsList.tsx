@@ -1,110 +1,33 @@
-import React, { useCallback, useEffect, useState } from "react";
-import { FiUserPlus, FiCheck, FiX, FiUserX, FiUsers } from "react-icons/fi";
-import { StatusSelector } from "./StatusSelector";
-import type { UserStatus } from "../types/social";
-
-const { ipcRenderer } = window.require("electron");
-
-interface Friend {
-  id: string;
-  username: string;
-  status: UserStatus;
-  lastSeen?: Date;
-}
+import { useMemo, useState } from "react";
+import { FiMoreVertical, FiPlus, FiSearch } from "react-icons/fi";
+import { Friend } from "../types/social";
 
 interface FriendsListProps {
-  username: string;
-  onClose: () => void;
+  friends: Friend[];
+  onChatStart: (friendId: string) => void;
 }
 
-export function FriendsList({ username, onClose }: FriendsListProps) {
-  const [friends, setFriends] = useState<Friend[]>([]);
-  const [currentStatus, setCurrentStatus] = useState<UserStatus>("online");
-  const [showStatusSelector, setShowStatusSelector] = useState(false);
-  const [friendRequests, setFriendRequests] = useState<{ id: string; username: string }[]>([]);
-  const [showingSection, setShowingSection] = useState<"friends" | "requests">("friends");
+export function FriendsList({ friends, onChatStart }: FriendsListProps) {
+  const [searchQuery, setSearchQuery] = useState("");
+  const [filter, setFilter] = useState<"all" | "online" | "offline">("all");
 
-  // Load friends and status from storage
-  useEffect(() => {
-    const savedFriends = localStorage.getItem("friends");
-    if (savedFriends) {
-      try {
-        const parsed = JSON.parse(savedFriends);
-        // Convert lastSeen back to Date objects
-        const friendsWithDates = parsed.map((friend: any) => ({
-          ...friend,
-          lastSeen: friend.lastSeen ? new Date(friend.lastSeen) : undefined,
-        }));
-        setFriends(friendsWithDates);
-      } catch (error) {
-        console.error("Failed to parse saved friends:", error);
-      }
-    }
-
-    const savedStatus = localStorage.getItem("userStatus");
-    if (savedStatus) {
-      setCurrentStatus(savedStatus as UserStatus);
-    }
-
-    const savedRequests = localStorage.getItem("friendRequests");
-    if (savedRequests) {
-      try {
-        setFriendRequests(JSON.parse(savedRequests));
-      } catch (error) {
-        console.error("Failed to parse saved friend requests:", error);
-      }
-    }
-  }, []);
-
-  // Save friends to storage
-  useEffect(() => {
-    localStorage.setItem("friends", JSON.stringify(friends));
-  }, [friends]);
-
-  // Save status to storage
-  useEffect(() => {
-    localStorage.setItem("userStatus", currentStatus);
-  }, [currentStatus]);
-
-  // Save friend requests to storage
-  useEffect(() => {
-    localStorage.setItem("friendRequests", JSON.stringify(friendRequests));
-  }, [friendRequests]);
-
-  const handleStatusChange = useCallback(
-    (newStatus: UserStatus) => {
-      setCurrentStatus(newStatus);
-      setShowStatusSelector(false);
-      ipcRenderer.invoke("broadcast-status", { username, status: newStatus });
-    },
-    [username]
-  );
-
-  const acceptFriendRequest = (requestId: string, requestUsername: string) => {
-    const newFriend: Friend = {
-      id: requestId,
-      username: requestUsername,
-      status: "offline",
-      lastSeen: new Date(),
-    };
-
-    setFriends((prev) => [...prev, newFriend]);
-    setFriendRequests((prev) => prev.filter((req) => req.id !== requestId));
-
-    // Send acceptance notification
-    ipcRenderer.invoke("send-friend-acceptance", {
-      to: requestUsername,
-      from: username,
-    });
-  };
-
-  const declineFriendRequest = (requestId: string) => {
-    setFriendRequests((prev) => prev.filter((req) => req.id !== requestId));
-  };
-
-  const removeFriend = (friendId: string) => {
-    setFriends((prev) => prev.filter((friend) => friend.id !== friendId));
-  };
+  const filteredFriends = useMemo(() => {
+    return friends
+      .filter((friend) => {
+        const matchesSearch = friend.username.toLowerCase().includes(searchQuery.toLowerCase());
+        const matchesFilter =
+          filter === "all" ||
+          (filter === "online" && friend.status !== "offline") ||
+          (filter === "offline" && friend.status === "offline");
+        return matchesSearch && matchesFilter;
+      })
+      .sort((a, b) => {
+        // Sort online users first, then by username
+        if (a.status !== "offline" && b.status === "offline") return -1;
+        if (a.status === "offline" && b.status !== "offline") return 1;
+        return a.username.localeCompare(b.username);
+      });
+  }, [friends, searchQuery, filter]);
 
   const getStatusColor = (status: string) => {
     switch (status) {
@@ -113,168 +36,109 @@ export function FriendsList({ username, onClose }: FriendsListProps) {
       case "away":
         return "bg-yellow-500";
       default:
-        return "bg-gray-400";
+        return "bg-gray-500";
     }
   };
 
+  const formatLastSeen = (lastSeen: string) => {
+    const date = new Date(lastSeen);
+    const now = new Date();
+    const diff = now.getTime() - date.getTime();
+    const minutes = Math.floor(diff / 1000 / 60);
+
+    if (minutes < 1) return "Just now";
+    if (minutes < 60) return `${minutes}m ago`;
+    if (minutes < 1440) return `${Math.floor(minutes / 60)}h ago`;
+    return `${Math.floor(minutes / 1440)}d ago`;
+  };
+
   return (
-    <div className="animate-fade-in">
-      {/* Header with status */}
-      <div className="flex items-center justify-between p-4 border-b border-gray-200 bg-gradient-to-r from-violet-50 to-indigo-50">
-        <div className="flex items-center space-x-3">
-          <div className="relative">
-            <div className={`w-3 h-3 rounded-full ${getStatusColor(currentStatus)} border-2 border-white`} />
-          </div>
-          <div>
-            <h3 className="font-semibold text-gray-800">{username}</h3>
-            <p className="text-sm text-gray-600 capitalize">{currentStatus}</p>
-          </div>
-        </div>
-
-        <div className="flex items-center space-x-2">
-          <button
-            onClick={() => setShowStatusSelector(!showStatusSelector)}
-            className="p-2 hover:bg-violet-100 rounded-full transition-colors"
-            title="Change status"
-          >
-            <div className={`w-2 h-2 rounded-full ${getStatusColor(currentStatus)}`} />
-          </button>
-          <button
-            onClick={onClose}
-            className="p-2 hover:bg-gray-100 rounded-full transition-colors"
-            title="Close"
-          >
-            <FiX className="w-4 h-4" />
-          </button>
-        </div>
-      </div>
-
-      {/* Status Selector */}
-      {showStatusSelector && (
-        <div className="animate-slide-down">
-          <StatusSelector
-            currentStatus={currentStatus}
-            onStatusChange={handleStatusChange}
+    <div className="flex flex-col h-full">
+      {/* Search and Filter */}
+      <div className="p-4 space-y-3">
+        <div className="relative">
+          <FiSearch className="absolute left-3 top-1/2 transform -translate-y-1/2 text-gray-400" />
+          <input
+            type="text"
+            placeholder="Search friends..."
+            value={searchQuery}
+            onChange={(e) => setSearchQuery(e.target.value)}
+            className="w-full pl-10 pr-4 py-2 bg-gray-800 border border-gray-700 rounded-lg text-white placeholder-gray-400 focus:outline-none focus:border-violet-500 focus:ring-1 focus:ring-violet-500"
           />
         </div>
-      )}
-
-      {/* Navigation */}
-      <div className="flex border-b border-gray-200">
-        <button
-          onClick={() => setShowingSection("friends")}
-          className={`flex-1 py-3 px-4 text-sm font-medium transition-colors ${
-            showingSection === "friends"
-              ? "text-violet-600 border-b-2 border-violet-600 bg-violet-50"
-              : "text-gray-600 hover:text-gray-800 hover:bg-gray-50"
-          }`}
-        >
-          <div className="flex items-center justify-center space-x-2">
-            <FiUsers className="w-4 h-4" />
-            <span>Friends ({friends.length})</span>
-          </div>
-        </button>
-        <button
-          onClick={() => setShowingSection("requests")}
-          className={`flex-1 py-3 px-4 text-sm font-medium transition-colors relative ${
-            showingSection === "requests"
-              ? "text-violet-600 border-b-2 border-violet-600 bg-violet-50"
-              : "text-gray-600 hover:text-gray-800 hover:bg-gray-50"
-          }`}
-        >
-          <div className="flex items-center justify-center space-x-2">
-            <FiUserPlus className="w-4 h-4" />
-            <span>Requests</span>
-            {friendRequests.length > 0 && (
-              <span className="absolute -top-1 -right-1 bg-red-500 text-white text-xs rounded-full w-5 h-5 flex items-center justify-center">
-                {friendRequests.length}
-              </span>
-            )}
-          </div>
-        </button>
+        <div className="flex space-x-2">
+          <button
+            onClick={() => setFilter("all")}
+            className={`px-3 py-1 rounded-full text-sm font-medium transition-colors ${
+              filter === "all" ? "bg-violet-600 text-white" : "bg-gray-800 text-gray-400 hover:text-white"
+            }`}
+          >
+            All
+          </button>
+          <button
+            onClick={() => setFilter("online")}
+            className={`px-3 py-1 rounded-full text-sm font-medium transition-colors ${
+              filter === "online" ? "bg-violet-600 text-white" : "bg-gray-800 text-gray-400 hover:text-white"
+            }`}
+          >
+            Online
+          </button>
+          <button
+            onClick={() => setFilter("offline")}
+            className={`px-3 py-1 rounded-full text-sm font-medium transition-colors ${
+              filter === "offline" ? "bg-violet-600 text-white" : "bg-gray-800 text-gray-400 hover:text-white"
+            }`}
+          >
+            Offline
+          </button>
+        </div>
       </div>
 
-      {/* Content */}
-      <div className="max-h-64 overflow-y-auto">
-        {showingSection === "friends" ? (
-          friends.length === 0 ? (
-            <div className="p-6 text-center text-gray-500 animate-fade-in">
-              <FiUsers className="w-8 h-8 mx-auto mb-2 opacity-50" />
-              <p className="text-sm">No friends yet</p>
-              <p className="text-xs mt-1">Connect with other users to see them here</p>
-            </div>
-          ) : (
-            <div className="space-y-1">
-              {friends.map((friend) => (
-                <div
-                  key={friend.id}
-                  className="flex items-center justify-between p-3 hover:bg-gray-50 transition-colors group animate-fade-in"
-                >
-                  <div className="flex items-center space-x-3">
-                    <div className="relative">
-                      <div
-                        className={`w-2.5 h-2.5 rounded-full ${getStatusColor(friend.status)} border border-white`}
-                      />
-                    </div>
-                    <div>
-                      <p className="text-sm font-medium text-gray-800">{friend.username}</p>
-                      <p className="text-xs text-gray-500 capitalize">
-                        {friend.status === "offline" && friend.lastSeen
-                          ? `Last seen ${friend.lastSeen.toLocaleDateString()}`
-                          : friend.status}
-                      </p>
-                    </div>
+      {/* Friends List */}
+      <div className="flex-1 overflow-y-auto">
+        {filteredFriends.map((friend) => (
+          <div
+            key={friend.id}
+            className="px-4 py-3 hover:bg-gray-800 cursor-pointer group"
+            onClick={() => onChatStart(friend.id)}
+          >
+            <div className="flex items-center justify-between">
+              <div className="flex items-center space-x-3">
+                <div className="relative">
+                  <div className="w-8 h-8 rounded-full bg-violet-600 flex items-center justify-center">
+                    <span className="text-sm text-white font-medium">{friend.username.charAt(0).toUpperCase()}</span>
                   </div>
-
-                  <button
-                    onClick={() => removeFriend(friend.id)}
-                    className="opacity-0 group-hover:opacity-100 p-1 hover:bg-red-100 text-red-600 rounded transition-all"
-                    title="Remove friend"
-                  >
-                    <FiUserX className="w-4 h-4" />
-                  </button>
+                  <div
+                    className={`absolute -bottom-1 -right-1 w-3 h-3 rounded-full border-2 border-gray-900 ${getStatusColor(
+                      friend.status
+                    )}`}
+                  />
                 </div>
-              ))}
-            </div>
-          )
-        ) : friendRequests.length === 0 ? (
-          <div className="p-6 text-center text-gray-500 animate-fade-in">
-            <FiUserPlus className="w-8 h-8 mx-auto mb-2 opacity-50" />
-            <p className="text-sm">No friend requests</p>
-            <p className="text-xs mt-1">Incoming requests will appear here</p>
-          </div>
-        ) : (
-          <div className="space-y-1">
-            {friendRequests.map((request) => (
-              <div
-                key={request.id}
-                className="flex items-center justify-between p-3 bg-blue-50 border-l-4 border-blue-400 animate-slide-down"
-              >
                 <div>
-                  <p className="text-sm font-medium text-gray-800">{request.username}</p>
-                  <p className="text-xs text-gray-600">wants to be friends</p>
-                </div>
-
-                <div className="flex space-x-2">
-                  <button
-                    onClick={() => acceptFriendRequest(request.id, request.username)}
-                    className="p-1 hover:bg-green-100 text-green-600 rounded transition-colors"
-                    title="Accept"
-                  >
-                    <FiCheck className="w-4 h-4" />
-                  </button>
-                  <button
-                    onClick={() => declineFriendRequest(request.id)}
-                    className="p-1 hover:bg-red-100 text-red-600 rounded transition-colors"
-                    title="Decline"
-                  >
-                    <FiX className="w-4 h-4" />
-                  </button>
+                  <div className="text-white font-medium">{friend.username}</div>
+                  {friend.status === "offline" && friend.lastSeen && (
+                    <div className="text-xs text-gray-400">Last seen {formatLastSeen(friend.lastSeen)}</div>
+                  )}
                 </div>
               </div>
-            ))}
+              <button className="opacity-0 group-hover:opacity-100 text-gray-400 hover:text-white transition-opacity">
+                <FiMoreVertical className="w-5 h-5" />
+              </button>
+            </div>
           </div>
-        )}
+        ))}
+      </div>
+
+      {/* Add Friend Button */}
+      <div className="p-4 border-t border-gray-800">
+        <button
+          className="w-full py-2 px-4 bg-gray-700 text-gray-400 rounded-lg font-medium transition-colors flex items-center justify-center space-x-2 cursor-not-allowed"
+          disabled
+        >
+          <FiPlus className="w-5 h-5" />
+          <span>Add Friend (Demo)</span>
+        </button>
+        <p className="text-xs text-gray-500 text-center mt-2">Coming soon in full release</p>
       </div>
     </div>
   );

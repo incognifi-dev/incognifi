@@ -246,7 +246,7 @@ export function SocialBar() {
           <div className="p-4 border-b border-gray-800 flex items-center justify-between">
             <div>
               <h3 className="text-white font-medium">Chat Demo</h3>
-              <p className="text-xs text-violet-400">Coming Soon Feature</p>
+              <p className="text-xs text-violet-400">Coming Soon</p>
             </div>
             <button
               onClick={() => setIsChatOpen(false)}
@@ -256,8 +256,8 @@ export function SocialBar() {
             </button>
           </div>
           <FriendsList
-            username={userData.username}
-            onClose={() => setIsChatOpen(false)}
+            friends={dummyFriends}
+            onChatStart={handleChatStart}
           />
         </div>
       )}
