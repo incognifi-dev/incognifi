@@ -245,7 +245,7 @@ export function SocialBar() {
         <div className="fixed bottom-12 right-4 w-64 bg-gray-900 rounded-t-lg overflow-hidden shadow-lg border border-gray-800 animate-slide-up">
           <div className="p-4 border-b border-gray-800 flex items-center justify-between">
             <div>
-              <h3 className="text-white font-medium">Friends Demo</h3>
+              <h3 className="text-white font-medium">Chat Demo</h3>
               <p className="text-xs text-violet-400">Coming Soon Feature</p>
             </div>
             <button
