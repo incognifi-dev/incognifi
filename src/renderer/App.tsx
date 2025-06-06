@@ -41,7 +41,7 @@ export default function App() {
     {
       id: "1",
       title: "New Tab",
-      url: "https://www.google.com",
+      url: "about:blank",
       isLoading: false,
       canGoBack: false,
       canGoForward: false,
@@ -226,7 +226,7 @@ export default function App() {
     const newTab: Tab = {
       id: Date.now().toString(),
       title: "New Tab",
-      url: "https://www.google.com",
+      url: "about:blank",
       isLoading: false,
       canGoBack: false,
       canGoForward: false,
@@ -286,10 +286,10 @@ export default function App() {
         const currentUrl = webview.getURL();
         const currentTitle = webview.getTitle();
 
-        // Don't update state during Cloudflare challenges to avoid navigation interference
+        // Allow state updates for Cloudflare challenges but log them
         if (currentUrl && currentUrl.includes("__cf_chl_rt_tk=")) {
-          console.log("Cloudflare challenge detected, avoiding state updates:", currentUrl);
-          return;
+          console.log("Cloudflare challenge navigation detected, allowing state update:", currentUrl);
+          // Continue with state update to allow proper challenge flow
         }
 
         updateTab(activeTabId, {
@@ -302,7 +302,7 @@ export default function App() {
         });
 
         // Add to history when navigation completes
-        if (currentUrl && currentTitle) {
+        if (currentUrl && currentTitle && !currentUrl.includes("__cf_chl_rt_tk=")) {
           addToHistory(currentUrl, currentTitle, activeTab.favicon);
         }
       };
@@ -310,10 +310,10 @@ export default function App() {
       const handlePageTitleUpdated = (e: any) => {
         const currentUrl = webview.getURL();
 
-        // Don't update state during Cloudflare challenges
+        // Allow title updates during Cloudflare challenges
         if (currentUrl && currentUrl.includes("__cf_chl_rt_tk=")) {
-          console.log("Cloudflare challenge detected, avoiding title updates:", currentUrl);
-          return;
+          console.log("Cloudflare challenge detected, allowing title update:", currentUrl);
+          // Continue with title update
         }
 
         updateTab(activeTabId, {
@@ -331,9 +331,10 @@ export default function App() {
       const handlePageFaviconUpdated = (e: any) => {
         const currentUrl = webview.getURL();
 
-        // Don't update state during Cloudflare challenges
+        // Allow updates during Cloudflare challenges
         if (currentUrl && currentUrl.includes("__cf_chl_rt_tk=")) {
-          return;
+          console.log("Cloudflare challenge detected, allowing favicon update");
+          // Continue with update
         }
 
         updateTab(activeTabId, {
@@ -347,9 +348,10 @@ export default function App() {
         const currentTitle = webview.getTitle();
         const currentUrl = webview.getURL();
 
-        // Don't update state during Cloudflare challenges
+        // Allow updates during Cloudflare challenges
         if (currentUrl && currentUrl.includes("__cf_chl_rt_tk=")) {
-          return;
+          console.log("Cloudflare challenge detected, allowing DOM ready update");
+          // Continue with update
         }
 
         if (currentTitle || currentUrl) {
@@ -375,11 +377,14 @@ export default function App() {
               : "N/A",
           });
 
-          // Special handling for Cloudflare challenge URLs - don't show errors for these
+          // Special handling for Cloudflare challenge URLs - allow limited refreshing
           if (event.validatedURL && event.validatedURL.includes("__cf_chl_rt_tk=")) {
-            console.log("Cloudflare challenge navigation detected, completely ignoring error:", event.errorCode);
-            // Don't update any state, don't show error page, let Cloudflare handle it
-            return;
+            console.log("Cloudflare challenge navigation detected, error code:", event.errorCode);
+            // Allow ERR_ABORTED and some refresh attempts for Cloudflare to work
+            if (event.errorCode === "ERR_ABORTED" || event.errorCode === -3) {
+              console.log("Allowing Cloudflare challenge refresh cycle");
+              return; // Let Cloudflare handle it and refresh as needed
+            }
           }
 
           // Filter out internal Electron errors that shouldn't show error pages
@@ -459,6 +464,14 @@ export default function App() {
         }
       };
 
+      const handleWillNavigate = (e: any) => {
+        // Allow Cloudflare challenge navigation without interference
+        if (e.url && (e.url.includes("__cf_chl_rt_tk=") || e.url.includes("/cdn-cgi/challenge-platform/"))) {
+          console.log("Allowing Cloudflare challenge navigation:", e.url);
+        }
+      };
+
+      webview.addEventListener("will-navigate", handleWillNavigate);
       webview.addEventListener("did-start-loading", handleStartLoading);
       webview.addEventListener("did-stop-loading", handleStopLoading);
       webview.addEventListener("did-navigate", handleNavigate);
@@ -468,6 +481,7 @@ export default function App() {
       webview.addEventListener("did-fail-load", handleDidFailLoad);
 
       return () => {
+        webview.removeEventListener("will-navigate", handleWillNavigate);
         webview.removeEventListener("did-start-loading", handleStartLoading);
         webview.removeEventListener("did-stop-loading", handleStopLoading);
         webview.removeEventListener("did-navigate", handleNavigate);
@@ -475,6 +489,46 @@ export default function App() {
         webview.removeEventListener("page-favicon-updated", handlePageFaviconUpdated);
         webview.removeEventListener("dom-ready", handleDomReady);
         webview.removeEventListener("did-fail-load", handleDidFailLoad);
+      };
+    }
+  }, [activeTabId, activeTab?.state]);
+
+  // Add permission request handlers for webview (important for Cloudflare)
+  useEffect(() => {
+    const webview = webviewRefs.current[activeTabId]?.current;
+    if (webview && activeTab?.state === "normal") {
+      const handlePermissionRequest = (e: any) => {
+        console.log("Permission requested:", e.permission);
+        // Allow all permissions for Cloudflare to work
+        e.request.allow();
+      };
+
+      const handleConsoleMessage = (e: any) => {
+        // Log console messages from the webview for debugging
+        if (e.message.includes("Cloudflare") || e.message.includes("cf-") || e.message.includes("challenge") || e.message.includes("Private Access Token")) {
+          console.log("Webview console:", e.message);
+        }
+      };
+
+      const handleNewWindow = (e: any) => {
+        // Allow new windows for Cloudflare challenges
+        console.log("New window requested:", e.url);
+        if (e.url.includes("cloudflare") || e.url.includes("cf-") || e.url.includes("challenge")) {
+          // Allow Cloudflare popups
+          e.preventDefault();
+          const { shell } = window.require("electron");
+          shell.openExternal(e.url);
+        }
+      };
+
+      webview.addEventListener("permission-request", handlePermissionRequest);
+      webview.addEventListener("console-message", handleConsoleMessage);
+      webview.addEventListener("new-window", handleNewWindow);
+
+      return () => {
+        webview.removeEventListener("permission-request", handlePermissionRequest);
+        webview.removeEventListener("console-message", handleConsoleMessage);
+        webview.removeEventListener("new-window", handleNewWindow);
       };
     }
   }, [activeTabId, activeTab?.state]);
@@ -735,6 +789,7 @@ export default function App() {
               if (activeTab.state === "splash") {
                 updateTab(activeTabId, {
                   state: "normal",
+                  url: url,
                 });
               } else if (activeTab.state === "error") {
                 // Clear error state before bookmark navigation
@@ -906,12 +961,12 @@ export default function App() {
             >
               <webview
                 ref={webviewRefs.current[tab.id]}
-                src={tab.url}
+                src={tab.url === "about:blank" ? "https://www.google.com" : tab.url}
                 className="w-full h-full"
                 partition="persist:webview"
-                allowpopups
-                useragent="Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/134.0.0.0 Safari/537.36"
-                webpreferences="nodeIntegration=false,contextIsolation=false,webSecurity=true"
+                allowpopups="true"
+                useragent="Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/119.0.0.0 Safari/537.36"
+                webpreferences="nodeIntegration=false,contextIsolation=true,webSecurity=true,javascript=true,images=true"
               />
             </div>
           );

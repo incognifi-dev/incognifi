@@ -251,11 +251,7 @@ class ProxyManager {
       await Promise.all([
         webviewSession.clearAuthCache(),
         webviewSession.clearHostResolverCache(),
-        // Clear only specific storages to preserve session cookies that help with Cloudflare
-        webviewSession.clearStorageData({
-          storages: ["websql", "indexdb", "cachestorage"],
-          quotas: ["temporary", "syncable"],
-        }),
+        // Don't clear any storage data to preserve Cloudflare cookies
       ]);
 
       const proxyRules = `http=${server.endpoint}:${server.port};https=${server.endpoint}:${server.port}`;
@@ -478,12 +474,38 @@ function createWindow(): BrowserWindow {
     "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/134.0.0.0 Safari/537.36";
   webviewSession.setUserAgent(userAgent);
 
+  // Handle permission requests for Private Access Tokens
+  webviewSession.setPermissionRequestHandler((webContents, permission, callback) => {
+    // Allow all permissions for Cloudflare to work properly
+    console.log(`Permission requested: ${permission} from ${webContents.getURL()}`);
+    callback(true);
+  });
+
+  // Enable features needed for Cloudflare challenges
+  webviewSession.webRequest.onBeforeSendHeaders((details, callback) => {
+    const headers = { ...details.requestHeaders };
+    // Ensure proper headers for Cloudflare
+    headers['Accept'] = headers['Accept'] || 'text/html,application/xhtml+xml,application/xml;q=0.9,image/webp,*/*;q=0.8';
+    headers['Accept-Language'] = headers['Accept-Language'] || 'en-US,en;q=0.5';
+    callback({ requestHeaders: headers });
+  });
+
   // Initialize managers
   const networkMonitor = new NetworkMonitor();
   const proxyManager = new ProxyManager();
 
   // Setup handlers
   setupIpcHandlers(mainWindow, networkMonitor, proxyManager);
+
+  // Set Content Security Policy for the main window
+  mainWindow.webContents.session.webRequest.onHeadersReceived((details, callback) => {
+    callback({
+      responseHeaders: {
+        ...details.responseHeaders,
+        'Content-Security-Policy': ["default-src 'self'; script-src 'self' 'unsafe-inline'; style-src 'self' 'unsafe-inline'; img-src 'self' data: https:; connect-src 'self' https:;"]
+      }
+    });
+  });
 
   // Window event handlers
   mainWindow.once("ready-to-show", () => {
