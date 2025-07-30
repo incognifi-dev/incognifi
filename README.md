@@ -74,8 +74,8 @@ IncogniFi is a **next-generation privacy browser** that combines professional-gr
 
 | Platform | Download | SHA256 Hash |
 |----------|----------|-------------|
-| **Windows (Setup)** | [IncogniFi-setup-1.6.0.exe](binaries/IncogniFi-setup-1.6.0.exe) | `84539c1b2fb279c639b7f0f35d1c5bd88a31d27bbae62823f78391de883ae084` |
-| **Windows (Latest)** | [IncogniFi-setup-latest.exe](binaries/IncogniFi-setup-latest.exe) | `84539c1b2fb279c639b7f0f35d1c5bd88a31d27bbae62823f78391de883ae084` |
+| **Windows (Setup)** | [IncogniFi-setup-1.6.0.exe](binaries/IncogniFi-setup-1.6.0.exe) | `7cc585cf3739b28b93db27de04a8c7545e17c3e969fe86768ed22aa41e372549` |
+| **Windows (Latest)** | [IncogniFi-setup-latest.exe](binaries/IncogniFi-setup-latest.exe) | `7cc585cf3739b28b93db27de04a8c7545e17c3e969fe86768ed22aa41e372549` |
 
 ### Previous Versions
 
