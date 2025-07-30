@@ -6,7 +6,7 @@
 
 **The Ultimate Privacy-Focused Browser with Integrated Professional VPN**
 
-[![Version](https://img.shields.io/badge/version-1.5.0-blue.svg)](package.json)
+[![Version](https://img.shields.io/badge/version-1.6.0-blue.svg)](package.json)
 [![Electron](https://img.shields.io/badge/Electron-28.2.1-47848f.svg)](https://electronjs.org/)
 [![React](https://img.shields.io/badge/React-18.2.0-61dafb.svg)](https://reactjs.org/)
 [![TypeScript](https://img.shields.io/badge/TypeScript-5.3.3-3178c6.svg)](https://typescriptlang.org/)
@@ -58,7 +58,6 @@ IncogniFi is a **next-generation privacy browser** that combines professional-gr
   - 🔗 **Etherscan** - Ethereum blockchain explorer
   - 🦄 **Uniswap** - Leading decentralized exchange
   - 📊 **CoinMarketCap & CoinGecko** - Market data and analytics
-  - 📈 **Dexscreener** - DeFi token tracking and analytics
 
 ### 🔮 **Coming Soon (Roadmap)**
 
@@ -71,12 +70,12 @@ IncogniFi is a **next-generation privacy browser** that combines professional-gr
 
 ## 📦 Download
 
-### Latest Release (v1.5.0)
+### Latest Release (v1.6.0)
 
 | Platform | Download | SHA256 Hash |
 |----------|----------|-------------|
-| **Windows (Setup)** | [IncogniFi-setup-1.5.0.exe](binaries/IncogniFi-setup-1.5.0.exe) | `15a68ab12f32655415a036491b87de7bb946f2f740f66feb8e9c777028d5f39f` |
-| **Windows (Latest)** | [IncogniFi-setup-latest.exe](binaries/IncogniFi-setup-latest.exe) | `15a68ab12f32655415a036491b87de7bb946f2f740f66feb8e9c777028d5f39f` |
+| **Windows (Setup)** | [IncogniFi-setup-1.6.0.exe](binaries/IncogniFi-setup-1.6.0.exe) | `84539c1b2fb279c639b7f0f35d1c5bd88a31d27bbae62823f78391de883ae084` |
+| **Windows (Latest)** | [IncogniFi-setup-latest.exe](binaries/IncogniFi-setup-latest.exe) | `84539c1b2fb279c639b7f0f35d1c5bd88a31d27bbae62823f78391de883ae084` |
 
 ### Previous Versions
 
@@ -85,6 +84,7 @@ IncogniFi is a **next-generation privacy browser** that combines professional-gr
 
 | Version | Platform | SHA256 Hash |
 |---------|----------|-------------|
+| **v1.5.0** | [IncogniFi-setup-1.5.0.exe](binaries/IncogniFi-setup-1.5.0.exe) | `15a68ab12f32655415a036491b87de7bb946f2f740f66feb8e9c777028d5f39f` |
 | **v1.4.0** | [IncogniFi-setup-1.4.0.exe](binaries/IncogniFi-setup-1.4.0.exe) | `3f4222e905ab26db0d1ce566d758b5135a187cc0e3f70b8719a1ec38ee3c79e1` |
 | **v1.3.0** | [IncogniFi-setup-1.3.0.exe](binaries/IncogniFi-setup-1.3.0.exe) | `c02089704c1bd8cc33d65fc4a4a9d94e81c4738de2cb2082b830edc8301d5dca` |
 
@@ -176,10 +176,10 @@ Always verify downloads using the provided SHA256 hashes:
 
 ```bash
 # Windows
-certutil -hashfile IncogniFi-setup-1.5.0.exe SHA256
+certutil -hashfile IncogniFi-setup-1.6.0.exe SHA256
 
 # macOS/Linux  
-shasum -a 256 IncogniFi-setup-1.5.0.exe
+shasum -a 256 IncogniFi-setup-1.6.0.exe
 ```
 
 ---
